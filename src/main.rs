@@ -8,14 +8,14 @@ fn main() -> eframe::Result<()> {
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([400.0, 300.0])
+            .with_inner_size([800.0, 600.0])
             .with_min_inner_size([300.0, 220.0]),
         ..Default::default()
     };
     eframe::run_native(
-        "eframe template",
+        "Modbus Scanner",
         native_options,
-        Box::new(|cc| Box::new(eframe_template::TemplateApp::new(cc))),
+        Box::new(|cc| Box::new(modbus_scanner::ModbusApp::new(cc))),
     )
 }
 
@@ -32,7 +32,7 @@ fn main() {
             .start(
                 "the_canvas_id", // hardcode it
                 web_options,
-                Box::new(|cc| Box::new(eframe_template::TemplateApp::new(cc))),
+                Box::new(|cc| Box::new(modbus_scanner::ModbusApp::new(cc))),
             )
             .await
             .expect("failed to start eframe");
