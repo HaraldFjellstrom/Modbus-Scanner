@@ -1,3 +1,10 @@
+use std::io::{Read, Write};
+use std::net::TcpStream;
+use std::time::Duration;
+
+//use egui;
+use rmodbus::{client::ModbusRequest, guess_response_frame_len, ModbusProto};
+
 use egui::CollapsingHeader;
 
 use crate::device;
@@ -78,66 +85,75 @@ impl eframe::App for ModbusApp {
 
         egui::SidePanel::left("left_panel").show(ctx, |ui| {
             ui.set_min_width(200.0);
-            CollapsingHeader::new("Devices")
-                .default_open(true)
-                .show(ui, |ui| {
-                    let mut dev_index: usize = 0;
-                    self.devices.retain_mut(|x| {
-                        let mut retain = true;
-                        let id = ui.make_persistent_id(dev_index);
-                        egui::collapsing_header::CollapsingState::load_with_default_open(
-                            ui.ctx(),
-                            id,
-                            true,
-                        )
-                        .show_header(ui, |ui| {
-                            if ui.toggle_value(&mut x.selected, &x.lable).clicked() {
-                                self.sel_device_index = dev_index;
-                                self.sel_querry_index = usize::MAX;
-                            }
-                            if dev_index > 0 {
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::RIGHT),
-                                    |ui| {
-                                        if ui.button("-").clicked() {
-                                            if self.sel_device_index == dev_index {
-                                                self.sel_device_index -= 1;
-                                            }
-                                            retain = false;
-                                        }
-                                    },
-                                );
-                            }
-                        })
-                        .body(|ui| {
-                            (self.sel_querry_index, self.sel_device_index) = x.build_querry_tree(
-                                ui,
-                                self.sel_querry_index,
-                                self.sel_device_index,
-                                dev_index,
-                            );
-                        });
-                        if self.sel_device_index == dev_index {
-                            x.selected = true
-                        } else {
-                            x.selected = false
-                        }
-                        dev_index += 1;
-                        return retain;
-                    });
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                let mut dev_index: usize = 0;
+                self.devices.retain_mut(|x| {
+                    let mut retain = true;
+                    let id = ui.make_persistent_id(dev_index);
+                    egui::collapsing_header::CollapsingState::load_with_default_open(
+                        ui.ctx(),
+                        id,
+                        true,
+                    )
+                    .show_header(ui, |ui| {
+                        let tv = ui
+                            .toggle_value(&mut x.selected, &x.lable)
+                            .context_menu(|ui| {
+                                //if dev_index > 0 {                                        Use these to move elements position inside vector, as of now i think i might need chained iterators.
+                                //    if ui.button("\u{2B06} Move Up").clicked(){
 
-                    if ui.button("Add Device").clicked() {
-                        self.devices.push(device::ModbusDevice::new());
+                                //    }
+                                //}
+                                //if dev_index < x.querrys.len() {
+                                //    if ui.button("\u{2B07} Move Down").clicked(){
+
+                                //    }
+                                //}
+
+                                if dev_index > 0 {
+                                    if ui.button("\u{1F5D1} Delete").clicked() {
+                                        if self.sel_device_index == dev_index {
+                                            self.sel_device_index -= 1;
+                                        }
+                                        retain = false;
+                                    }
+                                }
+                            });
+
+                        if tv.clicked() {
+                            self.sel_device_index = dev_index;
+                            self.sel_querry_index = usize::MAX;
+                        }
+                    })
+                    .body(|ui| {
+                        (self.sel_querry_index, self.sel_device_index) = x.build_querry_tree(
+                            ui,
+                            self.sel_querry_index,
+                            self.sel_device_index,
+                            dev_index,
+                        );
+                    });
+                    if self.sel_device_index == dev_index {
+                        x.selected = true
+                    } else {
+                        x.selected = false
                     }
+                    dev_index += 1;
+                    return retain;
                 });
+
+                if ui.button("Add Device").clicked() {
+                    self.devices.push(device::ModbusDevice::new());
+                }
+            });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if self.sel_querry_index == usize::MAX {
-                self.devices[self.sel_device_index].draw_device_frame(ui);
-            } else {
-                //Draw querry frame here
-            }
+            //if self.sel_querry_index == usize::MAX {
+            self.devices[self.sel_device_index].draw_device_frame(ui, self.sel_querry_index);
+            //} else {
+            //    self.devices[self.sel_device_index].querrys[self.sel_device_index].draw_query_frame(ui);
+            //}
         });
 
         //egui::CentralPanel::default().show(ctx, |ui| {
@@ -195,4 +211,60 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
         );
         ui.label(".");
     });
+}
+
+pub fn query(device: &crate::device::ModbusDevice, query: &mut crate::query::QuerryWrapper) {
+    let timeout = Duration::from_secs(1);
+
+    // open TCP connection
+    let mut stream = TcpStream::connect(format!("{}:{}", device.ip, device.port)).unwrap();
+    stream.set_read_timeout(Some(timeout)).unwrap();
+    stream.set_write_timeout(Some(timeout)).unwrap();
+
+    // create request object
+    let mut mreq = ModbusRequest::new(1, ModbusProto::TcpUdp);
+    mreq.tr_id = 2; // just for test, default tr_id is 1
+
+    // set 2 coils
+    let mut request = Vec::new();
+    mreq.generate_set_coils_bulk(0, &[true, true], &mut request)
+        .unwrap();
+
+    // write request to stream
+    stream.write(&request).unwrap();
+
+    // read first 6 bytes of response frame
+    let mut buf = [0u8; 6];
+    stream.read_exact(&mut buf).unwrap();
+    let mut response = Vec::new();
+    response.extend_from_slice(&buf);
+    let len = guess_response_frame_len(&buf, ModbusProto::TcpUdp).unwrap();
+    // read rest of response frame
+    if len > 6 {
+        let mut rest = vec![0u8; (len - 6) as usize];
+        stream.read_exact(&mut rest).unwrap();
+        response.extend(rest);
+    }
+    // check if frame has no Modbus error inside
+    mreq.parse_ok(&response).unwrap();
+
+    // get coil values back
+    mreq.generate_get_coils(0, 2, &mut request).unwrap();
+    stream.write(&request).unwrap();
+    let mut buf = [0u8; 6];
+    stream.read_exact(&mut buf).unwrap();
+    let mut response = Vec::new();
+    response.extend_from_slice(&buf);
+    let len = guess_response_frame_len(&buf, ModbusProto::TcpUdp).unwrap();
+    if len > 6 {
+        let mut rest = vec![0u8; (len - 6) as usize];
+        stream.read_exact(&mut rest).unwrap();
+        response.extend(rest);
+    }
+    let mut data = Vec::new();
+    // check if frame has no Modbus error inside and parse response bools into data vec
+    mreq.parse_bool(&response, &mut data).unwrap();
+    for i in 0..data.len() {
+        println!("{} {}", i, data[i]);
+    }
 }

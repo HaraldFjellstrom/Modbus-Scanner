@@ -15,6 +15,7 @@ eframe = { version = "0.24.1", default-features = false, features = [
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
 rmodbus = { version = "*", default-features = true }
+byteorder = "1"
 log = "0.4"
 
 # You only need serde if you want app persistence:

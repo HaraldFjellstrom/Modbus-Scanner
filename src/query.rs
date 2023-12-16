@@ -4,19 +4,34 @@ use std::time::Duration;
 
 //use egui;
 use crate::device;
+use byteorder::{LittleEndian, ByteOrder};
 use rmodbus::{client::ModbusRequest, guess_response_frame_len, ModbusProto};
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq)]
 #[repr(u8)]
 pub enum FC {
     ReadCoils = 1,
     ReadDiscreteInput = 2,
-    ReadMultipleHoldingRegisters = 3,
+    ReadHoldingRegisters = 3,
     ReadInputRegisters = 4,
-    WriteSingleCoil = 5,
-    WriteSingleHoldingRegister = 6,
-    WriteMultipleCoils = 15,
-    WriteMultipleHoldingRegisters = 16,
+    WriteCoil = 5,
+    WriteHoldingRegister = 6,
+    WriteCoils = 15,
+    WriteHoldingRegisters = 16,
+}
+
+#[repr(C)]
+union reg {
+    U8 : [u8; 248],
+    U16 : [u16; 124],
+    U32 : [u32; 62],
+    U64 : [u64; 31],
+    I8 : [i8; 248],
+    I16 : [i16; 124],
+    I32 : [i32; 62],
+    I64 : [i64; 31],
+    F32 : [f32; 62],
+    F64 : [f64; 31],
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -28,8 +43,8 @@ pub struct QuerryWrapper {
     pub tr_id: u8,
     pub unit_id: u8,
     pub function_code: FC,
-    pub read_buffer: Vec<u16>,
-    pub write_buffer: Vec<u16>,
+    pub read_buffer: Vec<u8>,
+    pub write_buffer: Vec<u8>,
     pub selected: bool,
 }
 
@@ -66,59 +81,80 @@ impl QuerryWrapper {
         }
     }
 
-    pub fn execute(&self, device: &device::ModbusDevice) {
-        let timeout = Duration::from_secs(1);
+    //pub fn get_request(&mut self) -> &[u8] {
+    //    let mut mreq = ModbusRequest::new(self.tr_id, ModbusProto::TcpUdp);
+    //    let mut request = Vec::new();
+    //    match &mut self.function_code {
+    //        FC::ReadCoils => mreq.generate_get_coils(self.reg, self.count, &mut self.read_buffer).unwrap(),
+    //        FC::ReadDiscreteInput => mreq.generate_get_discretes(self.reg, self.count, &mut self.read_buffer).unwrap(),
+    //        FC::ReadHoldingRegisters => mreq.generate_get_holdings(self.reg, self.count, &mut self.read_buffer).unwrap(),
+    //        FC::ReadInputRegisters => mreq.generate_get_inputs(self.reg, self.count, &mut self.read_buffer).unwrap(),
+    //        FC::WriteCoil => mreq.generate_get_inputs(self.reg, let w: [u8; self.count] = self.write_buffert[0..self.count].try_into().unwrap(), &mut self.write_buffer).unwrap(),
+    //        FC::WriteHoldingRegister => mreq.generate_get_inputs(self.reg, self.count, &mut self.write_buffer).unwrap(),
+    //        FC::WriteCoils => mreq.generate_get_inputs(self.reg, self.count, &mut self.write_buffer).unwrap(),
+    //        FC::WriteHoldingRegisters => mreq.generate_get_inputs(self.reg, self.count, &mut self.write_buffer).unwrap(),
+    //    };
+    //    return request
+    //}
 
-        // open TCP connection
-        let mut stream = TcpStream::connect(format!("{}:{}", device.ip, device.port)).unwrap();
-        stream.set_read_timeout(Some(timeout)).unwrap();
-        stream.set_write_timeout(Some(timeout)).unwrap();
+    pub fn draw_query_frame(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.add_sized([80.0, 10.0], egui::Label::new("Query Lable:"));
+            ui.add_sized(
+                [100.0, 10.0],
+                egui::TextEdit::singleline(&mut self.lable).hint_text("Input Lable"),
+            );
 
-        // create request object
-        let mut mreq = ModbusRequest::new(self.tr_id, ModbusProto::TcpUdp);
-        mreq.tr_id = 2; // just for test, default tr_id is 1
+            ui.add_sized([100.0, 10.0], egui::Label::new("Function Code:"));
+            egui::ComboBox::from_id_source(self.lable.to_owned())
+                .selected_text(format!("{:?}", self.function_code))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.function_code, FC::ReadCoils, "FC1 Read Coils");
+                    ui.selectable_value(
+                        &mut self.function_code,
+                        FC::ReadDiscreteInput,
+                        "FC2 Read Discrete Input",
+                    );
+                    ui.selectable_value(
+                        &mut self.function_code,
+                        FC::ReadHoldingRegisters,
+                        "FC3 Read Holding Registers",
+                    );
+                    ui.selectable_value(
+                        &mut self.function_code,
+                        FC::ReadInputRegisters,
+                        "FC4 Read Input Registers",
+                    );
+                    ui.selectable_value(&mut self.function_code, FC::WriteCoil, "FC5 Write Coil");
+                    ui.selectable_value(
+                        &mut self.function_code,
+                        FC::WriteHoldingRegister,
+                        "FC6 Write Holding Register",
+                    );
+                    ui.selectable_value(
+                        &mut self.function_code,
+                        FC::WriteCoils,
+                        "FC15 Write Coils",
+                    );
+                    ui.selectable_value(
+                        &mut self.function_code,
+                        FC::WriteHoldingRegisters,
+                        "FC16 Write Holding Registers",
+                    );
+                });
 
-        // set 2 coils
-        let mut request = Vec::new();
-        mreq.generate_set_coils_bulk(0, &[true, true], &mut request)
-            .unwrap();
+            ui.add_sized([80.0, 10.0], egui::Label::new("Offset:"));
+            ui.add_sized(
+                [20.0, 10.0],
+                egui::TextEdit::singleline(&mut self.reg.to_string()).hint_text("Input Port"),
+            );
 
-        // write request to stream
-        stream.write(&request).unwrap();
-
-        // read first 6 bytes of response frame
-        let mut buf = [0u8; 6];
-        stream.read_exact(&mut buf).unwrap();
-        let mut response = Vec::new();
-        response.extend_from_slice(&buf);
-        let len = guess_response_frame_len(&buf, ModbusProto::TcpUdp).unwrap();
-        // read rest of response frame
-        if len > 6 {
-            let mut rest = vec![0u8; (len - 6) as usize];
-            stream.read_exact(&mut rest).unwrap();
-            response.extend(rest);
-        }
-        // check if frame has no Modbus error inside
-        mreq.parse_ok(&response).unwrap();
-
-        // get coil values back
-        mreq.generate_get_coils(0, 2, &mut request).unwrap();
-        stream.write(&request).unwrap();
-        let mut buf = [0u8; 6];
-        stream.read_exact(&mut buf).unwrap();
-        let mut response = Vec::new();
-        response.extend_from_slice(&buf);
-        let len = guess_response_frame_len(&buf, ModbusProto::TcpUdp).unwrap();
-        if len > 6 {
-            let mut rest = vec![0u8; (len - 6) as usize];
-            stream.read_exact(&mut rest).unwrap();
-            response.extend(rest);
-        }
-        let mut data = Vec::new();
-        // check if frame has no Modbus error inside and parse response bools into data vec
-        mreq.parse_bool(&response, &mut data).unwrap();
-        for i in 0..data.len() {
-            println!("{} {}", i, data[i]);
-        }
+            ui.add_sized([80.0, 10.0], egui::Label::new("Count:"));
+            ui.add_sized(
+                [20.0, 10.0],
+                egui::TextEdit::singleline(&mut self.count.to_string()).hint_text("Input Port"),
+            );
+        });
+        ui.separator();
     }
 }

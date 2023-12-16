@@ -1407,6 +1407,7 @@ dependencies = [
 name = "modbus_scanner"
 version = "0.1.0"
 dependencies = [
+ "byteorder",
  "eframe",
  "egui",
  "env_logger",
