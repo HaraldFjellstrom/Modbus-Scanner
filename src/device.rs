@@ -90,29 +90,7 @@ impl ModbusDevice {
                 .unwrap()
                 .draw_query_frame(ui);
         }
-    }
-
-    pub fn connect(&self) -> Result<TcpStream, std::io::Error> {
-        let timeout = Duration::from_secs(1);
-
-        match TcpStream::connect(format!("{}:{}", self.ip, self.port)) {
-            Ok(tcp_stream) => {
-                tcp_stream.set_read_timeout(Some(timeout))?;
-                tcp_stream.set_write_timeout(Some(timeout))?;
-                return Ok(tcp_stream)
-            },
-            Err(e) => return Err(e),
-        };
-    }
-
-    pub fn runQuery(&self, query_num : usize) -> () {
-        match self.connect(){
-            Err(e) => (),
-            Ok(con) => {
-                //self.querrys[query_num].get_request();
-            }
-        }
-    }   
+    }  
 
     //pub fn query(&self) {
     //    let timeout = Duration::from_secs(1);
@@ -208,7 +186,7 @@ impl ModbusDevice {
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
                         if ui.button("\u{23F5}").clicked() {
-                            // Execute here
+                            x.execute(&self.ip, &self.port)
                         }
                     });
 

@@ -20,20 +20,6 @@ pub enum FC {
     WriteHoldingRegisters = 16,
 }
 
-#[repr(C)]
-union reg {
-    U8 : [u8; 248],
-    U16 : [u16; 124],
-    U32 : [u32; 62],
-    U64 : [u64; 31],
-    I8 : [i8; 248],
-    I16 : [i16; 124],
-    I32 : [i32; 62],
-    I64 : [i64; 31],
-    F32 : [f32; 62],
-    F64 : [f64; 31],
-}
-
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct QuerryWrapper {
@@ -81,21 +67,39 @@ impl QuerryWrapper {
         }
     }
 
-    //pub fn get_request(&mut self) -> &[u8] {
-    //    let mut mreq = ModbusRequest::new(self.tr_id, ModbusProto::TcpUdp);
-    //    let mut request = Vec::new();
-    //    match &mut self.function_code {
-    //        FC::ReadCoils => mreq.generate_get_coils(self.reg, self.count, &mut self.read_buffer).unwrap(),
-    //        FC::ReadDiscreteInput => mreq.generate_get_discretes(self.reg, self.count, &mut self.read_buffer).unwrap(),
-    //        FC::ReadHoldingRegisters => mreq.generate_get_holdings(self.reg, self.count, &mut self.read_buffer).unwrap(),
-    //        FC::ReadInputRegisters => mreq.generate_get_inputs(self.reg, self.count, &mut self.read_buffer).unwrap(),
-    //        FC::WriteCoil => mreq.generate_get_inputs(self.reg, let w: [u8; self.count] = self.write_buffert[0..self.count].try_into().unwrap(), &mut self.write_buffer).unwrap(),
-    //        FC::WriteHoldingRegister => mreq.generate_get_inputs(self.reg, self.count, &mut self.write_buffer).unwrap(),
-    //        FC::WriteCoils => mreq.generate_get_inputs(self.reg, self.count, &mut self.write_buffer).unwrap(),
-    //        FC::WriteHoldingRegisters => mreq.generate_get_inputs(self.reg, self.count, &mut self.write_buffer).unwrap(),
-    //    };
-    //    return request
-    //}
+    pub fn execute(&mut self,ip: &String, port: &String) -> () {
+        let mut mreq = ModbusRequest::new(self.tr_id, ModbusProto::TcpUdp);
+        let mut request = Vec::new();
+        match &mut self.function_code {
+            FC::ReadCoils => mreq.generate_get_coils(self.reg, self.count, &mut request).unwrap(),
+            FC::ReadDiscreteInput => mreq.generate_get_discretes(self.reg, self.count, &mut request).unwrap(),
+            FC::ReadHoldingRegisters => mreq.generate_get_holdings(self.reg, self.count, &mut request).unwrap(),
+            FC::ReadInputRegisters => mreq.generate_get_inputs(self.reg, self.count, &mut request).unwrap(),
+            FC::WriteCoil => mreq.generate_set_coil(self.reg, if self.write_buffer[0] == 0 {false}else{true}, &mut request).unwrap(),
+            FC::WriteHoldingRegister => mreq.generate_set_holding(self.reg, LittleEndian::read_u16(&self.write_buffer[0..1]), &mut request).unwrap(),
+            FC::WriteCoils => mreq.generate_set_coils_bulk(self.reg, self.write_buffer.chunks_exact(2).into_iter().map(|a| bool::from(u16::from_ne_bytes([a[0], a[1]])!=0)).collect::<Vec<_>>().as_slice(), &mut request).unwrap(),
+            FC::WriteHoldingRegisters => mreq.generate_set_holdings_bulk(self.reg, self.write_buffer.chunks_exact(2).into_iter().map(|a| u16::from_ne_bytes([a[0], a[1]])).collect::<Vec<_>>().as_slice(), &mut request).unwrap(),
+        };
+        match QuerryWrapper::connect(ip, port){
+            Err(e) => (),
+            Ok(mut con) => {
+                con.write(&request).unwrap();
+            }
+        }
+    }
+
+    pub fn connect(ip: &String, port: &String) -> Result<TcpStream, std::io::Error> {
+        let timeout = Duration::from_secs(1);
+
+        match TcpStream::connect(format!("{}:{}", ip, port)) {
+            Ok(tcp_stream) => {
+                tcp_stream.set_read_timeout(Some(timeout))?;
+                tcp_stream.set_write_timeout(Some(timeout))?;
+                return Ok(tcp_stream)
+            },
+            Err(e) => return Err(e),
+        };
+    }
 
     pub fn draw_query_frame(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
@@ -143,17 +147,11 @@ impl QuerryWrapper {
                     );
                 });
 
+            ui.spacing_mut().slider_width = -5.0;
             ui.add_sized([80.0, 10.0], egui::Label::new("Offset:"));
-            ui.add_sized(
-                [20.0, 10.0],
-                egui::TextEdit::singleline(&mut self.reg.to_string()).hint_text("Input Port"),
-            );
-
+            ui.add(egui::Slider::new(&mut self.reg, 0..=u16::MAX).handle_shape(egui::style::HandleShape::Rect{ aspect_ratio: -1.0 }));
             ui.add_sized([80.0, 10.0], egui::Label::new("Count:"));
-            ui.add_sized(
-                [20.0, 10.0],
-                egui::TextEdit::singleline(&mut self.count.to_string()).hint_text("Input Port"),
-            );
+            ui.add(egui::Slider::new(&mut self.count, 0..=124).handle_shape(egui::style::HandleShape::Rect{ aspect_ratio: -1.0 }));
         });
         ui.separator();
     }
