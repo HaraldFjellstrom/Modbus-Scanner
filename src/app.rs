@@ -1,12 +1,3 @@
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::time::Duration;
-
-//use egui;
-use rmodbus::{client::ModbusRequest, guess_response_frame_len, ModbusProto};
-
-use egui::CollapsingHeader;
-
 use crate::device;
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -17,19 +8,12 @@ pub struct ModbusApp {
     devices: Vec<device::ModbusDevice>,
     sel_device_index: usize,
     sel_querry_index: usize,
-
-    #[serde(skip)] // This how you opt-out of serialization of a field
-    value: f32,
 }
-
-//static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 impl Default for ModbusApp {
     fn default() -> Self {
         Self {
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
+            label: "Modbus Scanner".to_owned(),
             devices: vec![device::ModbusDevice::new()],
             sel_device_index: 0,
             sel_querry_index: 0,
@@ -149,122 +133,9 @@ impl eframe::App for ModbusApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            //if self.sel_querry_index == usize::MAX {
             self.devices[self.sel_device_index].draw_device_frame(ui, self.sel_querry_index);
-            //} else {
-            //    self.devices[self.sel_device_index].querrys[self.sel_device_index].draw_query_frame(ui);
-            //}
         });
 
-        //egui::CentralPanel::default().show(ctx, |ui| {
-        //    // The central panel the region left after adding TopPanel's and SidePanel's
-        //    ui.heading("eframe template");
-
-        //    ui.horizontal(|ui| {
-        //        ui.label("Write something: ");
-        //        ui.text_edit_singleline(&mut self.label);
-        //    });
-
-        //    ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-        //    if ui.button("Increment").clicked() {
-        //        self.value += 1.0;
-        //    }
-
-        //    ui.separator();
-        //    ui.horizontal(|ui|{
-        //        ui.label("Device Label: ");
-        //        ui.add(egui::TextEdit::singleline(&mut self.devices[0].lable).hint_text("Input Lable"));
-        //    });
-
-        //    ui.horizontal(|ui|{
-        //        ui.label("IP: ");
-        //        ui.add(egui::TextEdit::singleline(&mut self.devices[0].ip).hint_text("Input IP"));
-
-        //    });
-
-        //    ui.horizontal(|ui|{
-        //        ui.label("Port: ");
-        //        ui.add(egui::TextEdit::singleline(&mut self.devices[0].port).hint_text("Input Port"));
-        //    });
-
-        //    if ui.button("Query").clicked() {
-        //       self.devices[0].query();
-        //    }
-
-        //    ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-        //        powered_by_egui_and_eframe(ui);
-        //        egui::warn_if_debug_build(ui);
-        //    });
-        //});
     }
 }
 
-fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label("Powered by ");
-        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-        ui.label(" and ");
-        ui.hyperlink_to(
-            "eframe",
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
-        );
-        ui.label(".");
-    });
-}
-
-pub fn query(device: &crate::device::ModbusDevice, query: &mut crate::query::QuerryWrapper) {
-    let timeout = Duration::from_secs(1);
-
-    // open TCP connection
-    let mut stream = TcpStream::connect(format!("{}:{}", device.ip, device.port)).unwrap();
-    stream.set_read_timeout(Some(timeout)).unwrap();
-    stream.set_write_timeout(Some(timeout)).unwrap();
-
-    // create request object
-    let mut mreq = ModbusRequest::new(1, ModbusProto::TcpUdp);
-    mreq.tr_id = 2; // just for test, default tr_id is 1
-
-    // set 2 coils
-    let mut request = Vec::new();
-    mreq.generate_set_coils_bulk(0, &[true, true], &mut request)
-        .unwrap();
-
-    // write request to stream
-    stream.write(&request).unwrap();
-
-    // read first 6 bytes of response frame
-    let mut buf = [0u8; 6];
-    stream.read_exact(&mut buf).unwrap();
-    let mut response = Vec::new();
-    response.extend_from_slice(&buf);
-    let len = guess_response_frame_len(&buf, ModbusProto::TcpUdp).unwrap();
-    // read rest of response frame
-    if len > 6 {
-        let mut rest = vec![0u8; (len - 6) as usize];
-        stream.read_exact(&mut rest).unwrap();
-        response.extend(rest);
-    }
-    // check if frame has no Modbus error inside
-    mreq.parse_ok(&response).unwrap();
-
-    // get coil values back
-    mreq.generate_get_coils(0, 2, &mut request).unwrap();
-    stream.write(&request).unwrap();
-    let mut buf = [0u8; 6];
-    stream.read_exact(&mut buf).unwrap();
-    let mut response = Vec::new();
-    response.extend_from_slice(&buf);
-    let len = guess_response_frame_len(&buf, ModbusProto::TcpUdp).unwrap();
-    if len > 6 {
-        let mut rest = vec![0u8; (len - 6) as usize];
-        stream.read_exact(&mut rest).unwrap();
-        response.extend(rest);
-    }
-    let mut data = Vec::new();
-    // check if frame has no Modbus error inside and parse response bools into data vec
-    mreq.parse_bool(&response, &mut data).unwrap();
-    for i in 0..data.len() {
-        println!("{} {}", i, data[i]);
-    }
-}

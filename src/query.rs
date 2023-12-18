@@ -2,9 +2,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
-//use egui;
-use crate::device;
-use byteorder::{LittleEndian, ByteOrder};
+use byteorder::{ByteOrder, LittleEndian};
 use rmodbus::{client::ModbusRequest, guess_response_frame_len, ModbusProto};
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq)]
@@ -20,6 +18,15 @@ pub enum FC {
     WriteHoldingRegisters = 16,
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq)]
+pub enum DataView {
+    Unsigned16bit,
+    Signed16bit,
+    Unsigned32bit,
+    Signed32bit,
+    Float32bit,
+}
+
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct QuerryWrapper {
@@ -32,6 +39,11 @@ pub struct QuerryWrapper {
     pub read_buffer: Vec<u8>,
     pub write_buffer: Vec<u8>,
     pub selected: bool,
+    pub response: String,
+    pub data_veiw1 : DataView,
+    pub data_veiw2 : DataView,
+    pub factor : f32,
+    pub value_offsett : f32,
 }
 
 impl Default for QuerryWrapper {
@@ -44,9 +56,14 @@ impl Default for QuerryWrapper {
             tr_id: 0,
             unit_id: 0,
             function_code: FC::ReadCoils,
-            read_buffer: vec![],
-            write_buffer: vec![],
+            read_buffer: vec![0, 247],
+            write_buffer: vec![0, 247],
             selected: false,
+            response: "Not Executed".to_owned(),
+            data_veiw1: DataView::Unsigned16bit,
+            data_veiw2: DataView::Unsigned16bit,
+            factor : 1.,
+            value_offsett : 0.,
         }
     }
 }
@@ -61,29 +78,140 @@ impl QuerryWrapper {
             tr_id: 1,
             unit_id: 1,
             function_code: FC::ReadCoils,
-            read_buffer: vec![],
-            write_buffer: vec![],
+            read_buffer: vec![0, 247],
+            write_buffer: vec![0, 247],
             selected: false,
+            response: "Not Executed".to_owned(),
+            data_veiw1: DataView::Unsigned16bit,
+            data_veiw2: DataView::Unsigned16bit,
+            factor : 1.,
+            value_offsett : 0.,
         }
     }
 
-    pub fn execute(&mut self,ip: &String, port: &String) -> () {
+    pub fn execute(&mut self, ip: &String, port: &String) -> () {
         let mut mreq = ModbusRequest::new(self.tr_id, ModbusProto::TcpUdp);
         let mut request = Vec::new();
         match &mut self.function_code {
-            FC::ReadCoils => mreq.generate_get_coils(self.reg, self.count, &mut request).unwrap(),
-            FC::ReadDiscreteInput => mreq.generate_get_discretes(self.reg, self.count, &mut request).unwrap(),
-            FC::ReadHoldingRegisters => mreq.generate_get_holdings(self.reg, self.count, &mut request).unwrap(),
-            FC::ReadInputRegisters => mreq.generate_get_inputs(self.reg, self.count, &mut request).unwrap(),
-            FC::WriteCoil => mreq.generate_set_coil(self.reg, if self.write_buffer[0] == 0 {false}else{true}, &mut request).unwrap(),
-            FC::WriteHoldingRegister => mreq.generate_set_holding(self.reg, LittleEndian::read_u16(&self.write_buffer[0..1]), &mut request).unwrap(),
-            FC::WriteCoils => mreq.generate_set_coils_bulk(self.reg, self.write_buffer.chunks_exact(2).into_iter().map(|a| bool::from(u16::from_ne_bytes([a[0], a[1]])!=0)).collect::<Vec<_>>().as_slice(), &mut request).unwrap(),
-            FC::WriteHoldingRegisters => mreq.generate_set_holdings_bulk(self.reg, self.write_buffer.chunks_exact(2).into_iter().map(|a| u16::from_ne_bytes([a[0], a[1]])).collect::<Vec<_>>().as_slice(), &mut request).unwrap(),
-        };
-        match QuerryWrapper::connect(ip, port){
-            Err(e) => (),
+            FC::ReadCoils => mreq
+                .generate_get_coils(self.reg, self.count, &mut request)
+                .unwrap(),
+            FC::ReadDiscreteInput => mreq
+                .generate_get_discretes(self.reg, self.count, &mut request)
+                .unwrap(),
+            FC::ReadHoldingRegisters => mreq
+                .generate_get_holdings(self.reg, self.count, &mut request)
+                .unwrap(),
+            FC::ReadInputRegisters => mreq
+                .generate_get_inputs(self.reg, self.count, &mut request)
+                .unwrap(),
+            FC::WriteCoil => mreq
+                .generate_set_coil(
+                    self.reg,
+                    if self.write_buffer[0] == 0 {
+                        false
+                    } else {
+                        true
+                    },
+                    &mut request,
+                )
+                .unwrap(),
+            FC::WriteHoldingRegister => {
+                match mreq.generate_set_holding(
+                    self.reg,
+                    LittleEndian::read_u16(&self.write_buffer),
+                    &mut request,
+                ) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        self.response = e.to_string();
+                        return;
+                    }
+                }
+            }
+            FC::WriteCoils => mreq
+                .generate_set_coils_bulk(
+                    self.reg,
+                    self.write_buffer
+                        .chunks_exact(2)
+                        .into_iter()
+                        .map(|a| bool::from(u16::from_ne_bytes([a[0], a[1]]) != 0))
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                    &mut request,
+                )
+                .unwrap(),
+            FC::WriteHoldingRegisters => {
+                match mreq.generate_set_holdings_bulk(
+                    self.reg,
+                    self.write_buffer
+                        .chunks_exact(2)
+                        .into_iter()
+                        .map(|a| u16::from_ne_bytes([a[0], a[1]]))
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                    &mut request,
+                ) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        self.response = e.to_string();
+                        return;
+                    }
+                }
+            }
+        }
+
+        match QuerryWrapper::connect(ip, port) {
+            Err(e) => self.response = e.to_string(),
             Ok(mut con) => {
-                con.write(&request).unwrap();
+                match con.write(&request) {
+                    Ok(_) => (),
+                    Err(e) => self.response = e.to_string(),
+                }
+
+                // read first 6 bytes of response frame
+                let mut buf = [0u8; 6];
+                match con.read_exact(&mut buf) {
+                    Ok(_) => (),
+                    Err(e) => self.response = e.to_string(),
+                }
+
+                let mut response = Vec::new();
+                response.extend_from_slice(&buf);
+                match guess_response_frame_len(&buf, ModbusProto::TcpUdp) {
+                    Ok(len) => {
+                        if len > 6 {
+                            let mut rest = vec![0u8; (len - 6) as usize];
+                            con.read_exact(&mut rest).unwrap();
+                            response.extend(rest);
+                        }
+                    }
+                    Err(e) => self.response = e.to_string(),
+                }
+
+                // check if frame has no Modbus error inside
+                match mreq.parse_ok(&response) {
+                    Err(e) => self.response = e.to_string(),
+                    Ok(_ok) => {
+                        match self.function_code {
+                            FC::ReadCoils
+                            | FC::ReadDiscreteInput
+                            | FC::ReadHoldingRegisters
+                            | FC::ReadInputRegisters => {
+                                response.drain(0..9);
+                                self.read_buffer = response;
+                                self.response = "Read successful".to_owned()
+                            }
+                            FC::WriteCoil
+                            | FC::WriteCoils
+                            | FC::WriteHoldingRegister
+                            | FC::WriteHoldingRegisters => {
+                                self.response = "Write successful".to_owned()
+                            }
+                        }
+                        //println!("{:02X?}", self.read_buffer);
+                    }
+                }
             }
         }
     }
@@ -95,8 +223,8 @@ impl QuerryWrapper {
             Ok(tcp_stream) => {
                 tcp_stream.set_read_timeout(Some(timeout))?;
                 tcp_stream.set_write_timeout(Some(timeout))?;
-                return Ok(tcp_stream)
-            },
+                return Ok(tcp_stream);
+            }
             Err(e) => return Err(e),
         };
     }
@@ -146,13 +274,494 @@ impl QuerryWrapper {
                         "FC16 Write Holding Registers",
                     );
                 });
-
+        });
+        ui.horizontal(|ui| {
             ui.spacing_mut().slider_width = -5.0;
             ui.add_sized([80.0, 10.0], egui::Label::new("Offset:"));
-            ui.add(egui::Slider::new(&mut self.reg, 0..=u16::MAX).handle_shape(egui::style::HandleShape::Rect{ aspect_ratio: -1.0 }));
-            ui.add_sized([80.0, 10.0], egui::Label::new("Count:"));
-            ui.add(egui::Slider::new(&mut self.count, 0..=124).handle_shape(egui::style::HandleShape::Rect{ aspect_ratio: -1.0 }));
+            ui.add(
+                egui::Slider::new(&mut self.reg, 0..=u16::MAX)
+                    .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
+            );
+            ui.add_sized([80.0, 10.0], egui::Label::new("Registers:"));
+            if ui.add(
+                egui::Slider::new(&mut self.count, 1..=122)
+                    .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
+            ).lost_focus(){
+                self.write_buffer = vec![0;(self.count*2) as usize]
+            }
+            ui.label(self.response.as_str());
         });
         ui.separator();
+
+        ui.horizontal(|ui| {
+            // Radio button to set big or little endian ??
+            ui.label("Data as ");
+            egui::ComboBox::from_id_source("Dataview 1")
+                    .selected_text(format!("{:?}", self.data_veiw1))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.data_veiw1, DataView::Unsigned16bit, "16-bit Unsigned Integer");
+                        ui.selectable_value(&mut self.data_veiw1, DataView::Signed16bit, "16-bit Signed Integer");
+                        ui.selectable_value(&mut self.data_veiw1, DataView::Unsigned32bit, "32-bit Unsigned Integer");
+                        ui.selectable_value(&mut self.data_veiw1, DataView::Signed32bit, "32-bit Signed Integer");
+                        ui.selectable_value(&mut self.data_veiw1, DataView::Float32bit, "32-bit Float");
+            });
+
+            match self.function_code {
+                FC::ReadCoils
+                | FC::ReadDiscreteInput
+                | FC::ReadHoldingRegisters
+                | FC::ReadInputRegisters => {
+                    ui.spacing_mut().slider_width = -5.0;
+                    ui.label("Factor:");
+                    ui.add(
+                        egui::Slider::new(&mut self.factor, 0.0..=f32::MAX)
+                            .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
+                    );
+                    ui.label("Value Offsett:");
+                    ui.add(
+                        egui::Slider::new(&mut self.value_offsett, f32::MIN..=f32::MAX)
+                            .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
+                    );
+                }
+                FC::WriteCoil
+                | FC::WriteCoils
+                | FC::WriteHoldingRegister
+                | FC::WriteHoldingRegisters => ()
+            }
+
+        });
+
+        match self.data_veiw1 {
+            DataView::Unsigned16bit => {
+                 match self.function_code {
+                    FC::ReadCoils
+                    | FC::ReadDiscreteInput
+                    | FC::ReadHoldingRegisters
+                    | FC::ReadInputRegisters => {
+                        self.draw_read_data_grid_u16(ui);
+                    }
+                    FC::WriteCoil
+                    | FC::WriteCoils
+                    | FC::WriteHoldingRegister
+                    | FC::WriteHoldingRegisters => {
+                        self.draw_write_data_grid_u16(ui);
+                    }
+                }
+            },
+            DataView::Signed16bit => {
+                 match self.function_code {
+                    FC::ReadCoils
+                    | FC::ReadDiscreteInput
+                    | FC::ReadHoldingRegisters
+                    | FC::ReadInputRegisters => {
+                        self.draw_read_data_grid_i16(ui);
+                    }
+                    FC::WriteCoil
+                    | FC::WriteCoils
+                    | FC::WriteHoldingRegister
+                    | FC::WriteHoldingRegisters => {
+                        self.draw_write_data_grid_i16(ui);
+                    }
+                }
+            },
+            DataView::Unsigned32bit => {
+                 match self.function_code {
+                    FC::ReadCoils
+                    | FC::ReadDiscreteInput
+                    | FC::ReadHoldingRegisters
+                    | FC::ReadInputRegisters => {
+                        self.draw_read_data_grid_u32(ui);
+                    }
+                    FC::WriteCoil
+                    | FC::WriteCoils
+                    | FC::WriteHoldingRegister
+                    | FC::WriteHoldingRegisters => {
+                        self.draw_write_data_grid_u32(ui);
+                    }
+                }
+            },
+            DataView::Signed32bit => {
+                 match self.function_code {
+                    FC::ReadCoils
+                    | FC::ReadDiscreteInput
+                    | FC::ReadHoldingRegisters
+                    | FC::ReadInputRegisters => {
+                        self.draw_read_data_grid_i32(ui);
+                    }
+                    FC::WriteCoil
+                    | FC::WriteCoils
+                    | FC::WriteHoldingRegister
+                    | FC::WriteHoldingRegisters => {
+                        self.draw_write_data_grid_i32(ui);
+                    }
+                }
+            },
+            DataView::Float32bit => {
+                 match self.function_code {
+                    FC::ReadCoils
+                    | FC::ReadDiscreteInput
+                    | FC::ReadHoldingRegisters
+                    | FC::ReadInputRegisters => {
+                        self.draw_read_data_grid_f32(ui);
+                    }
+                    FC::WriteCoil
+                    | FC::WriteCoils
+                    | FC::WriteHoldingRegister
+                    | FC::WriteHoldingRegisters => {
+                        self.draw_write_data_grid_f32(ui);
+                    }
+                }
+            },
+        }
+        
+        ui.separator();
+
+        ui.horizontal(|ui| {
+            // Radio button to set big or little endian ??
+            ui.label("Data as ");
+            egui::ComboBox::from_id_source("Dataview 2")
+                    .selected_text(format!("{:?}", self.data_veiw2))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.data_veiw2, DataView::Unsigned16bit, "16-bit Unsigned Integer");
+                        ui.selectable_value(&mut self.data_veiw2, DataView::Signed16bit, "16-bit Signed Integer");
+                        ui.selectable_value(&mut self.data_veiw2, DataView::Unsigned32bit, "32-bit Unsigned Integer");
+                        ui.selectable_value(&mut self.data_veiw2, DataView::Signed32bit, "32-bit Signed Integer");
+                        ui.selectable_value(&mut self.data_veiw2, DataView::Float32bit, "32-bit Float");
+            });
+
+            match self.function_code {
+                FC::ReadCoils
+                | FC::ReadDiscreteInput
+                | FC::ReadHoldingRegisters
+                | FC::ReadInputRegisters => {
+                    ui.spacing_mut().slider_width = -5.0;
+                    ui.label("Factor:");
+                    ui.add(
+                        egui::Slider::new(&mut self.factor, 0.0..=f32::MAX)
+                            .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
+                    );
+                    ui.label("Value Offsett:");
+                    ui.add(
+                        egui::Slider::new(&mut self.value_offsett, f32::MIN..=f32::MAX)
+                            .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
+                    );
+                }
+                FC::WriteCoil
+                | FC::WriteCoils
+                | FC::WriteHoldingRegister
+                | FC::WriteHoldingRegisters => ()
+            }
+        });
+
+        match self.data_veiw2 {
+            DataView::Unsigned16bit => {
+                 match self.function_code {
+                    FC::ReadCoils
+                    | FC::ReadDiscreteInput
+                    | FC::ReadHoldingRegisters
+                    | FC::ReadInputRegisters => {
+                        self.draw_read_data_grid_u16(ui);
+                    }
+                    FC::WriteCoil
+                    | FC::WriteCoils
+                    | FC::WriteHoldingRegister
+                    | FC::WriteHoldingRegisters => {
+                        self.draw_write_data_grid_u16(ui);
+                    }
+                }
+            },
+            DataView::Signed16bit => {
+                 match self.function_code {
+                    FC::ReadCoils
+                    | FC::ReadDiscreteInput
+                    | FC::ReadHoldingRegisters
+                    | FC::ReadInputRegisters => {
+                        self.draw_read_data_grid_i16(ui);
+                    }
+                    FC::WriteCoil
+                    | FC::WriteCoils
+                    | FC::WriteHoldingRegister
+                    | FC::WriteHoldingRegisters => {
+                        self.draw_write_data_grid_i16(ui);
+                    }
+                }
+            },
+            DataView::Unsigned32bit => {
+                 match self.function_code {
+                    FC::ReadCoils
+                    | FC::ReadDiscreteInput
+                    | FC::ReadHoldingRegisters
+                    | FC::ReadInputRegisters => {
+                        if self.read_buffer.len() >= 4 {
+                            self.draw_read_data_grid_u32(ui);
+                        }else{ui.label("Read more registers to be able to show");}
+                    }
+                    FC::WriteCoil
+                    | FC::WriteCoils
+                    | FC::WriteHoldingRegister
+                    | FC::WriteHoldingRegisters => {
+                        self.draw_write_data_grid_u32(ui);
+                    }
+                }
+            },
+            DataView::Signed32bit => {
+                 match self.function_code {
+                    FC::ReadCoils
+                    | FC::ReadDiscreteInput
+                    | FC::ReadHoldingRegisters
+                    | FC::ReadInputRegisters => {
+                        if self.read_buffer.len() >= 4 {
+                            self.draw_read_data_grid_i32(ui);
+                        }else{ui.label("Read more registers to be able to show");}
+                    }
+                    FC::WriteCoil
+                    | FC::WriteCoils
+                    | FC::WriteHoldingRegister
+                    | FC::WriteHoldingRegisters => {
+                        self.draw_write_data_grid_i32(ui);
+                    }
+                }
+            },
+            DataView::Float32bit => {
+                 match self.function_code {
+                    FC::ReadCoils
+                    | FC::ReadDiscreteInput
+                    | FC::ReadHoldingRegisters
+                    | FC::ReadInputRegisters => {
+                        if self.read_buffer.len() >= 4 {
+                            self.draw_read_data_grid_f32(ui);
+                        }else{ui.label("Read more registers to be able to show");}
+                    }
+                    FC::WriteCoil
+                    | FC::WriteCoils
+                    | FC::WriteHoldingRegister
+                    | FC::WriteHoldingRegisters => {
+                        self.draw_write_data_grid_f32(ui);
+                    }
+                }
+            },
+        }
+        
+        ui.separator();
+
+
+    }
+
+    pub fn draw_read_data_grid_u8(&self, ui: &mut egui::Ui) -> (){
+        egui::Grid::new("some_unique_id").striped(true).show(ui, |ui| {
+            //ui.add_sized([20.0, 10.0], egui::Label::new(egui::RichText::new("").heading()));
+            //ui.add_sized([40.0, 10.0], egui::Label::new(egui::RichText::new("1").heading()));
+            //ui.add_sized([40.0, 10.0], egui::Label::new(egui::RichText::new("2").heading()));
+            //ui.add_sized([40.0, 10.0], egui::Label::new(egui::RichText::new("3").heading()));
+            //ui.add_sized([40.0, 10.0], egui::Label::new(egui::RichText::new("4").heading()));
+            //ui.add_sized([40.0, 10.0], egui::Label::new(egui::RichText::new("5").heading()));
+            //ui.add_sized([40.0, 10.0], egui::Label::new(egui::RichText::new("6").heading()));
+            //ui.add_sized([40.0, 10.0], egui::Label::new(egui::RichText::new("7").heading()));
+            //ui.add_sized([40.0, 10.0], egui::Label::new(egui::RichText::new("8").heading()));
+            //ui.end_row();
+
+            for i in (0..self.read_buffer.len()).step_by(1) {
+                if (i % 8) == 0 {
+                    ui.end_row();
+                    //ui.add_sized([20.0, 10.0], egui::Label::new(egui::RichText::new(i.to_string()).heading()));
+                }
+                ui.add_sized(
+                    [40.0, 10.0],
+                    egui::Label::new(self.read_buffer[i].to_string()).sense(egui::Sense::click()),
+                )
+                .on_hover_text(format!("Byte {}", (1 + self.reg + i as u16)))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+            }
+        });
+    }
+
+    pub fn draw_read_data_grid_u16(&self, ui: &mut egui::Ui) -> (){
+        egui::Grid::new("u16_grid_r").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
+
+            let mut reg_nr : u16 = (self.reg+1) as u16;
+            for i in (0..self.read_buffer.len()).step_by(2) {
+                if (i % 16) == 0 {
+                    ui.end_row();
+                }
+                ui.add_sized(
+                    [40.0, 10.0],
+                    egui::Label::new((u16::from_be_bytes([self.read_buffer[i], self.read_buffer[i+1]]) as f32 *self.factor+self.value_offsett).to_string()).sense(egui::Sense::click()),
+                )
+                .on_hover_text(format!("Reg {}", reg_nr))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                reg_nr += 1;
+            }
+        });
+    }
+
+    pub fn draw_read_data_grid_i16(&self, ui: &mut egui::Ui) -> (){
+        egui::Grid::new("i16_grid_r").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
+
+            let mut reg_nr : u16 = (self.reg+1) as u16;
+            for i in (0..self.read_buffer.len()).step_by(2) {
+                if (i % 16) == 0 {
+                    ui.end_row();
+                }
+                ui.add_sized(
+                    [40.0, 10.0],
+                    egui::Label::new((i16::from_be_bytes([self.read_buffer[i], self.read_buffer[i+1]]) as f32 *self.factor+self.value_offsett).to_string()).sense(egui::Sense::click()),
+                )
+                .on_hover_text(format!("Reg {}", reg_nr))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                reg_nr += 1;
+            }
+        });
+    }
+
+    pub fn draw_read_data_grid_u32(&self, ui: &mut egui::Ui) -> (){
+        egui::Grid::new("u32_grid_r").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
+
+            let mut reg_nr : u16 = (self.reg+1) as u16;
+            for i in (0..self.read_buffer.len()-2).step_by(4) {
+                if (i % 32) == 0 {
+                    ui.end_row();
+                }
+                ui.add_sized(
+                    [40.0, 10.0],
+                    egui::Label::new((u32::from_be_bytes([self.read_buffer[i+2], self.read_buffer[i+3], self.read_buffer[i], self.read_buffer[i+1]]) as f32 *self.factor+self.value_offsett).to_string()).sense(egui::Sense::click()),
+                )
+                .on_hover_text(format!("Reg {}", reg_nr))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                reg_nr += 2;
+            }
+        });
+    }
+
+    pub fn draw_read_data_grid_i32(&self, ui: &mut egui::Ui) -> (){
+        egui::Grid::new("i32_grid_r").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
+
+            let mut reg_nr : u16 = (self.reg+1) as u16;
+            for i in (0..self.read_buffer.len()-2).step_by(4) {
+                if (i % 32) == 0 {
+                    ui.end_row();
+                }
+                ui.add_sized(
+                    [40.0, 10.0],
+                    egui::Label::new((i32::from_be_bytes([self.read_buffer[i+2], self.read_buffer[i+3], self.read_buffer[i], self.read_buffer[i+1]]) as f32 *self.factor+self.value_offsett).to_string()).sense(egui::Sense::click()),
+                )
+                .on_hover_text(format!("Reg {}", reg_nr))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                reg_nr += 2;
+            }
+        });
+    }
+
+    pub fn draw_read_data_grid_f32(&self, ui: &mut egui::Ui) -> (){
+        egui::Grid::new("f32_grid_r").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
+
+            let mut reg_nr : u16 = (self.reg+1) as u16;
+            for i in (0..self.read_buffer.len()-2).step_by(4) {
+                if (i % 32) == 0 {
+                    ui.end_row();
+                }
+                ui.add_sized(
+                    [40.0, 10.0],
+                    egui::Label::new( (f32::from_be_bytes([self.read_buffer[i+2], self.read_buffer[i+3], self.read_buffer[i], self.read_buffer[i+1]])*self.factor+self.value_offsett).to_string()).sense(egui::Sense::click()),
+                )
+                .on_hover_text(format!("Reg {}", reg_nr))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                reg_nr += 2;
+            }
+        });
+    }
+
+    pub fn draw_write_data_grid_u16(&self, ui: &mut egui::Ui) -> () {
+            egui::Grid::new("u16_grid_w").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
+            ui.spacing_mut().slider_width = -5.0;
+            let mut reg_nr : u16 = (self.reg+1) as u16;
+            for i in (0..self.write_buffer.len()).step_by(2) {
+                if (i % 16) == 0 {
+                    ui.end_row();
+                }
+                ui.add(
+                    egui::Slider::new(unsafe{ &mut std::slice::from_raw_parts_mut(self.write_buffer[i..i+1].as_ptr() as *mut u16, 2)[0] }, u16::MIN..=u16::MAX)
+                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
+                )
+                .on_hover_text(format!("Reg {}", reg_nr))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                reg_nr += 1;
+            }
+        });
+    }
+
+    pub fn draw_write_data_grid_i16(&self, ui: &mut egui::Ui) -> () {
+            egui::Grid::new("i16_grid_w").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
+            ui.spacing_mut().slider_width = -5.0;
+            let mut reg_nr : u16 = (self.reg+1) as u16;
+            for i in (0..self.write_buffer.len()).step_by(2) {
+                if (i % 16) == 0 {
+                    ui.end_row();
+                }
+                ui.add(
+                    egui::Slider::new(unsafe{ &mut std::slice::from_raw_parts_mut(self.write_buffer[i..i+1].as_ptr() as *mut i16, 2)[0] }, i16::MIN..=i16::MAX)
+                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
+                )
+                .on_hover_text(format!("Reg {}", reg_nr))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                reg_nr += 1;
+            }
+        });
+    }
+
+    pub fn draw_write_data_grid_u32(&self, ui: &mut egui::Ui) -> () {
+            egui::Grid::new("u32_grid_w").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
+            ui.spacing_mut().slider_width = -5.0;
+            let mut reg_nr : u16 = (self.reg+1) as u16;
+            for i in (0..self.write_buffer.len()).step_by(4) {
+                if (i % 32) == 0 {
+                    ui.end_row();
+                }
+                ui.add(
+                    egui::Slider::new(unsafe{ &mut std::slice::from_raw_parts_mut(self.write_buffer[i..i+3].as_ptr() as *mut u32, 4)[0] }, u32::MIN..=u32::MAX)
+                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
+                )
+                .on_hover_text(format!("Reg {}", reg_nr))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                reg_nr += 2;
+            }
+        });
+    }
+
+    pub fn draw_write_data_grid_i32(&self, ui: &mut egui::Ui) -> () {
+            egui::Grid::new("i32_grid_w").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
+            ui.spacing_mut().slider_width = -5.0;
+            let mut reg_nr : u16 = (self.reg+1) as u16;
+            for i in (0..self.write_buffer.len()).step_by(4) {
+                if (i % 32) == 0 {
+                    ui.end_row();
+                }
+                ui.add(
+                    egui::Slider::new(unsafe{ &mut std::slice::from_raw_parts_mut(self.write_buffer[i..i+3].as_ptr() as *mut i32, 4)[0] }, i32::MIN..=i32::MAX)
+                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
+                )
+                .on_hover_text(format!("Reg {}", reg_nr))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                reg_nr += 2;
+            }
+        });
+    }
+
+    pub fn draw_write_data_grid_f32(&self, ui: &mut egui::Ui) -> () {
+            egui::Grid::new("f32_grid_w").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
+            ui.spacing_mut().slider_width = -5.0;
+            let mut reg_nr : u16 = (self.reg +1) as u16;
+            for i in (0..self.write_buffer.len()).step_by(4) {
+                if (i % 32) == 0 {
+                    ui.end_row();
+                }
+                ui.add(
+                    egui::Slider::new(unsafe{ &mut std::slice::from_raw_parts_mut(self.write_buffer[i..i+3].as_ptr() as *mut f32, 4)[0] }, f32::MIN..=f32::MAX)
+                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
+                )
+                .on_hover_text(format!("Reg {}", reg_nr))
+                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                reg_nr += 2;
+            }
+        });
     }
 }
