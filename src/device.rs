@@ -112,7 +112,7 @@ impl ModbusDevice {
                         .toggle_value(&mut x.selected, &x.lable)
                         .context_menu(|ui| {
                             if quer_index > 0 {
-                                if ui.button("Delete").clicked() {
+                                if ui.button("\u{1F5D1} Delete").clicked() {
                                     if index == quer_index {
                                         final_index = quer_index - 1;
                                         if final_index <= 0 {
@@ -135,6 +135,10 @@ impl ModbusDevice {
                         }
                     });
 
+                    for n in 0..x.watched_list.len() {
+                        x.watched_list[n].update(&x.read_buffer);
+                    }
+
                     if ret {
                         return (final_index, this_device);
                     } else {
@@ -145,7 +149,41 @@ impl ModbusDevice {
                         }
                     }
                 })
-                .body(|ui| {});
+                .body(|ui| {
+                    x.watched_list.retain_mut(|x| {
+                        let mut retain = true;
+                        ui.horizontal(|ui|{
+                            if !x.locked{
+                                ui.add_sized([150.,10.], egui::TextEdit::singleline(&mut x.lable)).context_menu( |ui|{
+                                    if ui.button("\u{1F5D1} Delete").clicked(){
+                                        retain = false;
+                                    }
+                                });
+
+                                ui.add_sized([60.,10.], egui::Label::new(x.resulting_value.to_string())).context_menu( |ui|{
+                                    if ui.button("\u{1F5D1} Delete").clicked(){
+                                        retain = false;
+                                    }
+                                });
+
+                                ui.add_sized([50.,10.], egui::TextEdit::singleline(&mut x.suffix)).context_menu( |ui|{
+                                    if ui.button("\u{1F5D1} Delete").clicked(){
+                                        retain = false;
+                                    }
+                                });
+                                if ui.button("\u{1F512}").clicked(){x.locked = true}
+                            }else{
+                                ui.label(format!("{}:     {} {}", x.lable, x.resulting_value, x.suffix)).context_menu( |ui| {
+                                    if ui.button("\u{1F511} Unlock").clicked(){
+                                        x.locked = false;
+                                    }
+                                });
+                            }
+                        });
+                        
+                        return retain;
+                    })
+                });
 
             if index == quer_index && this_device == current_device {
                 x.selected = true

@@ -5,6 +5,7 @@ use std::time::Duration;
 use byteorder::{ByteOrder, LittleEndian};
 use rmodbus::{client::ModbusRequest, guess_response_frame_len, ModbusProto};
 
+
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq)]
 #[repr(u8)]
 pub enum FC {
@@ -18,7 +19,7 @@ pub enum FC {
     WriteHoldingRegisters = 16,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Clone, Copy)]
 pub enum DataView {
     Unsigned16bit,
     Signed16bit,
@@ -41,9 +42,9 @@ pub struct QuerryWrapper {
     pub selected: bool,
     pub response: String,
     pub data_veiw1 : DataView,
-    pub data_veiw2 : DataView,
     pub factor : f32,
     pub value_offsett : f32,
+    pub watched_list : Vec<crate::watched::WatchedReg>,
 }
 
 impl Default for QuerryWrapper {
@@ -61,9 +62,9 @@ impl Default for QuerryWrapper {
             selected: false,
             response: "Not Executed".to_owned(),
             data_veiw1: DataView::Unsigned16bit,
-            data_veiw2: DataView::Unsigned16bit,
             factor : 1.,
             value_offsett : 0.,
+            watched_list : vec![],
         }
     }
 }
@@ -83,9 +84,9 @@ impl QuerryWrapper {
             selected: false,
             response: "Not Executed".to_owned(),
             data_veiw1: DataView::Unsigned16bit,
-            data_veiw2: DataView::Unsigned16bit,
             factor : 1.,
             value_offsett : 0.,
+            watched_list : vec![],
         }
     }
 
@@ -416,135 +417,6 @@ impl QuerryWrapper {
         
         ui.separator();
 
-        ui.horizontal(|ui| {
-            // Radio button to set big or little endian ??
-            ui.label("Data as ");
-            egui::ComboBox::from_id_source("Dataview 2")
-                    .selected_text(format!("{:?}", self.data_veiw2))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.data_veiw2, DataView::Unsigned16bit, "16-bit Unsigned Integer");
-                        ui.selectable_value(&mut self.data_veiw2, DataView::Signed16bit, "16-bit Signed Integer");
-                        ui.selectable_value(&mut self.data_veiw2, DataView::Unsigned32bit, "32-bit Unsigned Integer");
-                        ui.selectable_value(&mut self.data_veiw2, DataView::Signed32bit, "32-bit Signed Integer");
-                        ui.selectable_value(&mut self.data_veiw2, DataView::Float32bit, "32-bit Float");
-            });
-
-            match self.function_code {
-                FC::ReadCoils
-                | FC::ReadDiscreteInput
-                | FC::ReadHoldingRegisters
-                | FC::ReadInputRegisters => {
-                    ui.spacing_mut().slider_width = -5.0;
-                    ui.label("Factor:");
-                    ui.add(
-                        egui::Slider::new(&mut self.factor, 0.0..=f32::MAX)
-                            .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
-                    );
-                    ui.label("Value Offsett:");
-                    ui.add(
-                        egui::Slider::new(&mut self.value_offsett, f32::MIN..=f32::MAX)
-                            .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 }),
-                    );
-                }
-                FC::WriteCoil
-                | FC::WriteCoils
-                | FC::WriteHoldingRegister
-                | FC::WriteHoldingRegisters => ()
-            }
-        });
-
-        match self.data_veiw2 {
-            DataView::Unsigned16bit => {
-                 match self.function_code {
-                    FC::ReadCoils
-                    | FC::ReadDiscreteInput
-                    | FC::ReadHoldingRegisters
-                    | FC::ReadInputRegisters => {
-                        self.draw_read_data_grid_u16(ui);
-                    }
-                    FC::WriteCoil
-                    | FC::WriteCoils
-                    | FC::WriteHoldingRegister
-                    | FC::WriteHoldingRegisters => {
-                        self.draw_write_data_grid_u16(ui);
-                    }
-                }
-            },
-            DataView::Signed16bit => {
-                 match self.function_code {
-                    FC::ReadCoils
-                    | FC::ReadDiscreteInput
-                    | FC::ReadHoldingRegisters
-                    | FC::ReadInputRegisters => {
-                        self.draw_read_data_grid_i16(ui);
-                    }
-                    FC::WriteCoil
-                    | FC::WriteCoils
-                    | FC::WriteHoldingRegister
-                    | FC::WriteHoldingRegisters => {
-                        self.draw_write_data_grid_i16(ui);
-                    }
-                }
-            },
-            DataView::Unsigned32bit => {
-                 match self.function_code {
-                    FC::ReadCoils
-                    | FC::ReadDiscreteInput
-                    | FC::ReadHoldingRegisters
-                    | FC::ReadInputRegisters => {
-                        if self.read_buffer.len() >= 4 {
-                            self.draw_read_data_grid_u32(ui);
-                        }else{ui.label("Read more registers to be able to show");}
-                    }
-                    FC::WriteCoil
-                    | FC::WriteCoils
-                    | FC::WriteHoldingRegister
-                    | FC::WriteHoldingRegisters => {
-                        self.draw_write_data_grid_u32(ui);
-                    }
-                }
-            },
-            DataView::Signed32bit => {
-                 match self.function_code {
-                    FC::ReadCoils
-                    | FC::ReadDiscreteInput
-                    | FC::ReadHoldingRegisters
-                    | FC::ReadInputRegisters => {
-                        if self.read_buffer.len() >= 4 {
-                            self.draw_read_data_grid_i32(ui);
-                        }else{ui.label("Read more registers to be able to show");}
-                    }
-                    FC::WriteCoil
-                    | FC::WriteCoils
-                    | FC::WriteHoldingRegister
-                    | FC::WriteHoldingRegisters => {
-                        self.draw_write_data_grid_i32(ui);
-                    }
-                }
-            },
-            DataView::Float32bit => {
-                 match self.function_code {
-                    FC::ReadCoils
-                    | FC::ReadDiscreteInput
-                    | FC::ReadHoldingRegisters
-                    | FC::ReadInputRegisters => {
-                        if self.read_buffer.len() >= 4 {
-                            self.draw_read_data_grid_f32(ui);
-                        }else{ui.label("Read more registers to be able to show");}
-                    }
-                    FC::WriteCoil
-                    | FC::WriteCoils
-                    | FC::WriteHoldingRegister
-                    | FC::WriteHoldingRegisters => {
-                        self.draw_write_data_grid_f32(ui);
-                    }
-                }
-            },
-        }
-        
-        ui.separator();
-
-
     }
 
     pub fn draw_read_data_grid_u8(&self, ui: &mut egui::Ui) -> (){
@@ -575,7 +447,7 @@ impl QuerryWrapper {
         });
     }
 
-    pub fn draw_read_data_grid_u16(&self, ui: &mut egui::Ui) -> (){
+    pub fn draw_read_data_grid_u16(&mut self, ui: &mut egui::Ui) -> (){
         egui::Grid::new("u16_grid_r").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
 
             let mut reg_nr : u16 = (self.reg+1) as u16;
@@ -588,13 +460,16 @@ impl QuerryWrapper {
                     egui::Label::new((u16::from_be_bytes([self.read_buffer[i], self.read_buffer[i+1]]) as f32 *self.factor+self.value_offsett).to_string()).sense(egui::Sense::click()),
                 )
                 .on_hover_text(format!("Reg {}", reg_nr))
-                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                .context_menu(|ui| 
+                    if ui.button("\u{1F441} Add to watched").clicked() {
+                        self.watched_list.push(crate::watched::WatchedReg::new(format!("Reg {} as U16 * {} + {}",reg_nr, self.factor, self.value_offsett).to_owned(), "".to_owned(), i,self.factor,self.value_offsett, self.data_veiw1));
+                    });
                 reg_nr += 1;
             }
         });
     }
 
-    pub fn draw_read_data_grid_i16(&self, ui: &mut egui::Ui) -> (){
+    pub fn draw_read_data_grid_i16(&mut self, ui: &mut egui::Ui) -> (){
         egui::Grid::new("i16_grid_r").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
 
             let mut reg_nr : u16 = (self.reg+1) as u16;
@@ -607,13 +482,16 @@ impl QuerryWrapper {
                     egui::Label::new((i16::from_be_bytes([self.read_buffer[i], self.read_buffer[i+1]]) as f32 *self.factor+self.value_offsett).to_string()).sense(egui::Sense::click()),
                 )
                 .on_hover_text(format!("Reg {}", reg_nr))
-                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                .context_menu(|ui| 
+                    if ui.button("Watch").clicked() {
+                        self.watched_list.push(crate::watched::WatchedReg::new(format!("Reg {} as U16 * {} + {}",reg_nr, self.factor, self.value_offsett).to_owned(), "".to_owned(), i,self.factor,self.value_offsett, self.data_veiw1));
+                    });
                 reg_nr += 1;
             }
         });
     }
 
-    pub fn draw_read_data_grid_u32(&self, ui: &mut egui::Ui) -> (){
+    pub fn draw_read_data_grid_u32(&mut self, ui: &mut egui::Ui) -> (){
         egui::Grid::new("u32_grid_r").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
 
             let mut reg_nr : u16 = (self.reg+1) as u16;
@@ -626,13 +504,15 @@ impl QuerryWrapper {
                     egui::Label::new((u32::from_be_bytes([self.read_buffer[i+2], self.read_buffer[i+3], self.read_buffer[i], self.read_buffer[i+1]]) as f32 *self.factor+self.value_offsett).to_string()).sense(egui::Sense::click()),
                 )
                 .on_hover_text(format!("Reg {}", reg_nr))
-                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                .context_menu(|ui| if ui.button("Watch").clicked() {
+                    self.watched_list.push(crate::watched::WatchedReg::new(format!("Reg {} as U16 * {} + {}",reg_nr, self.factor, self.value_offsett).to_owned(), "".to_owned(), i,self.factor,self.value_offsett, self.data_veiw1));
+                });
                 reg_nr += 2;
             }
         });
     }
 
-    pub fn draw_read_data_grid_i32(&self, ui: &mut egui::Ui) -> (){
+    pub fn draw_read_data_grid_i32(&mut self, ui: &mut egui::Ui) -> (){
         egui::Grid::new("i32_grid_r").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
 
             let mut reg_nr : u16 = (self.reg+1) as u16;
@@ -645,13 +525,15 @@ impl QuerryWrapper {
                     egui::Label::new((i32::from_be_bytes([self.read_buffer[i+2], self.read_buffer[i+3], self.read_buffer[i], self.read_buffer[i+1]]) as f32 *self.factor+self.value_offsett).to_string()).sense(egui::Sense::click()),
                 )
                 .on_hover_text(format!("Reg {}", reg_nr))
-                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                .context_menu(|ui| if ui.button("Watch").clicked() {
+                    self.watched_list.push(crate::watched::WatchedReg::new(format!("Reg {} as U16 * {} + {}",reg_nr, self.factor, self.value_offsett).to_owned(), "".to_owned(), i,self.factor,self.value_offsett, self.data_veiw1));
+                });
                 reg_nr += 2;
             }
         });
     }
 
-    pub fn draw_read_data_grid_f32(&self, ui: &mut egui::Ui) -> (){
+    pub fn draw_read_data_grid_f32(&mut self, ui: &mut egui::Ui) -> (){
         egui::Grid::new("f32_grid_r").striped(true).max_col_width(60.).min_col_width(60.).show(ui, |ui| {
 
             let mut reg_nr : u16 = (self.reg+1) as u16;
@@ -664,7 +546,9 @@ impl QuerryWrapper {
                     egui::Label::new( (f32::from_be_bytes([self.read_buffer[i+2], self.read_buffer[i+3], self.read_buffer[i], self.read_buffer[i+1]])*self.factor+self.value_offsett).to_string()).sense(egui::Sense::click()),
                 )
                 .on_hover_text(format!("Reg {}", reg_nr))
-                .context_menu(|ui| if ui.button("Watch").clicked() {});
+                .context_menu(|ui| if ui.button("Watch").clicked() {
+                    self.watched_list.push(crate::watched::WatchedReg::new(format!("Reg {} as U16 * {} + {}",reg_nr, self.factor, self.value_offsett).to_owned(), "".to_owned(), i,self.factor,self.value_offsett, self.data_veiw1));
+                });
                 reg_nr += 2;
             }
         });
