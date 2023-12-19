@@ -16,7 +16,7 @@ impl Default for ModbusApp {
             label: "Modbus Scanner".to_owned(),
             devices: vec![device::ModbusDevice::new()],
             sel_device_index: 0,
-            sel_querry_index: 0,
+            sel_querry_index: usize::MAX,
         }
     }
 }
@@ -135,7 +135,5 @@ impl eframe::App for ModbusApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             self.devices[self.sel_device_index].draw_device_frame(ui, self.sel_querry_index);
         });
-
     }
 }
-

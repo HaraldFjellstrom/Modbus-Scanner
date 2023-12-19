@@ -1,9 +1,3 @@
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::time::Duration;
-
-//use egui;
-use rmodbus::{client::ModbusRequest, guess_response_frame_len, ModbusProto};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -82,8 +76,10 @@ impl ModbusDevice {
             //    }
             //}
             //ui.label(self.connection_status.to_owned());
-            ui.add_sized(ui.available_size(), egui::TextEdit::multiline(&mut self.notes));
-            
+            ui.add_sized(
+                ui.available_size(),
+                egui::TextEdit::multiline(&mut self.notes),
+            );
         } else {
             self.querrys
                 .iter_mut()
@@ -152,35 +148,47 @@ impl ModbusDevice {
                 .body(|ui| {
                     x.watched_list.retain_mut(|x| {
                         let mut retain = true;
-                        ui.horizontal(|ui|{
-                            if !x.locked{
-                                ui.add_sized([150.,10.], egui::TextEdit::singleline(&mut x.lable)).context_menu( |ui|{
-                                    if ui.button("\u{1F5D1} Delete").clicked(){
+                        ui.horizontal(|ui| {
+                            if !x.locked {
+                                ui.add_sized([150., 10.], egui::TextEdit::singleline(&mut x.lable))
+                                    .context_menu(|ui| {
+                                        if ui.button("\u{1F5D1} Delete").clicked() {
+                                            retain = false;
+                                        }
+                                    });
+
+                                ui.add_sized(
+                                    [60., 10.],
+                                    egui::Label::new(x.resulting_value.to_string()),
+                                )
+                                .context_menu(|ui| {
+                                    if ui.button("\u{1F5D1} Delete").clicked() {
                                         retain = false;
                                     }
                                 });
 
-                                ui.add_sized([60.,10.], egui::Label::new(x.resulting_value.to_string())).context_menu( |ui|{
-                                    if ui.button("\u{1F5D1} Delete").clicked(){
-                                        retain = false;
-                                    }
-                                });
-
-                                ui.add_sized([50.,10.], egui::TextEdit::singleline(&mut x.suffix)).context_menu( |ui|{
-                                    if ui.button("\u{1F5D1} Delete").clicked(){
-                                        retain = false;
-                                    }
-                                });
-                                if ui.button("\u{1F512}").clicked(){x.locked = true}
-                            }else{
-                                ui.label(format!("{}:     {} {}", x.lable, x.resulting_value, x.suffix)).context_menu( |ui| {
-                                    if ui.button("\u{1F511} Unlock").clicked(){
+                                ui.add_sized([50., 10.], egui::TextEdit::singleline(&mut x.suffix))
+                                    .context_menu(|ui| {
+                                        if ui.button("\u{1F5D1} Delete").clicked() {
+                                            retain = false;
+                                        }
+                                    });
+                                if ui.button("\u{1F512}").clicked() {
+                                    x.locked = true
+                                }
+                            } else {
+                                ui.label(format!(
+                                    "{}:     {} {}",
+                                    x.lable, x.resulting_value, x.suffix
+                                ))
+                                .context_menu(|ui| {
+                                    if ui.button("\u{1F511} Unlock").clicked() {
                                         x.locked = false;
                                     }
                                 });
                             }
                         });
-                        
+
                         return retain;
                     })
                 });

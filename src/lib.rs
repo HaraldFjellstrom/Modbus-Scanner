@@ -10,4 +10,3 @@ mod query;
 pub use query::QuerryWrapper;
 
 mod watched;
-
