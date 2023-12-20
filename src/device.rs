@@ -69,30 +69,21 @@ impl ModbusDevice {
 
             ui.horizontal(|ui| {
                 ui.add_sized([100.0, 10.0], egui::Label::new("Device ID:"));
-                ui.spacing_mut().slider_width = -5.0;
                 ui.add(
-                    egui::Slider::new(&mut self.unit_id, u8::MIN..=u8::MAX)
-                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                        .drag_value_speed(0.0),
-                ).on_hover_cursor(egui::CursorIcon::Text);
+                    egui::DragValue::new(&mut self.unit_id)
+                        .clamp_range(u8::MIN..=u8::MAX)
+                        .speed(0.0),
+                )
+                .on_hover_cursor(egui::CursorIcon::Text);
             });
 
-            //if ui.button("Try Connection").clicked() {
-            //    match self.connect(){
-            //        Ok(r) => self.connection_status = "Connection succesfully established".to_string(),
-            //        Err(e) => self.connection_status = e.to_string(),
-
-            //    }
-            //}
-            //ui.label(self.connection_status.to_owned());
             ui.add_sized(
                 ui.available_size(),
                 egui::TextEdit::multiline(&mut self.notes),
             );
         } else {
             self.querrys
-                .iter_mut()
-                .nth(query_id)
+                .get_mut(query_id)
                 .unwrap()
                 .draw_query_frame(ui);
         }
@@ -116,13 +107,11 @@ impl ModbusDevice {
                     let tv = ui
                         .toggle_value(&mut x.selected, &x.lable)
                         .context_menu(|ui| {
-                            if quer_index > 0 {
-                                if ui.button("\u{1F5D1} Delete").clicked() {
-                                    if index == quer_index {
-                                        final_index = quer_index - 1;
-                                    }
-                                    retain = false
+                            if quer_index > 0 && ui.button("\u{1F5D1} Delete").clicked() {
+                                if index == quer_index {
+                                    final_index = quer_index - 1;
                                 }
+                                retain = false
                             }
                         });
 
@@ -143,12 +132,10 @@ impl ModbusDevice {
 
                     if ret {
                         (final_index, this_device)
+                    } else if retain {
+                        (index, current_device)
                     } else {
-                        if retain {
-                            (index, current_device)
-                        } else {
-                            (final_index, current_device)
-                        }
+                        (final_index, current_device)
                     }
                 })
                 .body(|ui| {
@@ -187,6 +174,10 @@ impl ModbusDevice {
                                     "{}:     {} {}",
                                     x.label, x.resulting_value, x.suffix
                                 ))
+                                .on_hover_text(format!(
+                                    "Factor {}   Offsett {}",
+                                    x.factor, x.value_offsett
+                                ))
                                 .context_menu(|ui| {
                                     if ui.button("\u{1F511} Unlock").clicked() {
                                         x.locked = false;
@@ -209,12 +200,10 @@ impl ModbusDevice {
         }
         if ret {
             (final_index, this_device)
+        } else if retain {
+            (index, current_device)
         } else {
-            if retain {
-                (index, current_device)
-            } else {
-                (final_index, current_device)
-            }
+            (final_index, current_device)
         }
     }
 }

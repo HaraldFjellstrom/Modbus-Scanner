@@ -90,17 +90,15 @@ impl eframe::App for ModbusApp {
                                 //}
                                 //if dev_index < x.querrys.len() {
                                 //    if ui.button("\u{2B07} Move Down").clicked(){
-
+                                        
                                 //    }
                                 //}
 
-                                if dev_index > 0 {
-                                    if ui.button("\u{1F5D1} Delete").clicked() {
-                                        if self.sel_device_index == dev_index {
-                                            self.sel_device_index -= 1;
-                                        }
-                                        retain = false;
+                                if dev_index > 0 && ui.button("\u{1F5D1} Delete").clicked() {
+                                    if self.sel_device_index == dev_index {
+                                        self.sel_device_index -= 1;
                                     }
+                                    retain = false;
                                 }
                             });
 

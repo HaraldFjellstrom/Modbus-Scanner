@@ -94,12 +94,13 @@ impl QuerryWrapper {
         let mut mreq = ModbusRequest::new(self.tr_id, ModbusProto::TcpUdp);
         let mut request = Vec::new();
         match &mut self.function_code {
-            FC::ReadCoils => match mreq.generate_get_coils(self.reg, self.count*16, &mut request) {
+            FC::ReadCoils => match mreq.generate_get_coils(self.reg, self.count * 16, &mut request)
+            {
                 Ok(_) => (),
                 Err(e) => self.response = e.to_string(),
             },
             FC::ReadDiscreteInput => {
-                match mreq.generate_get_discretes(self.reg, self.count*16, &mut request) {
+                match mreq.generate_get_discretes(self.reg, self.count * 16, &mut request) {
                     Ok(_) => (),
                     Err(e) => self.response = e.to_string(),
                 }
@@ -198,16 +199,16 @@ impl QuerryWrapper {
                 match mreq.parse_ok(&response) {
                     Err(e) => self.response = e.to_string(),
                     Ok(_ok) => match self.function_code {
-                        FC::ReadCoils
-                        | FC::ReadDiscreteInput => {
-                            let mut temphold : Vec<bool> = vec![];
-                            match mreq.parse_bool(&response, &mut temphold){
-                                Ok(_) => self.read_buffer = unsafe { std::mem::transmute(temphold)},
-                                Err(e) => self.response = e.to_string()
+                        FC::ReadCoils | FC::ReadDiscreteInput => {
+                            let mut temphold: Vec<bool> = vec![];
+                            match mreq.parse_bool(&response, &mut temphold) {
+                                Ok(_) => {
+                                    self.read_buffer = unsafe { std::mem::transmute(temphold) }
+                                }
+                                Err(e) => self.response = e.to_string(),
                             }
                         }
-                        FC::ReadHoldingRegisters
-                        | FC::ReadInputRegisters => {
+                        FC::ReadHoldingRegisters | FC::ReadInputRegisters => {
                             response.drain(0..9);
                             self.read_buffer = response;
                             self.response = "Read successful".to_owned()
@@ -284,19 +285,19 @@ impl QuerryWrapper {
                 });
         });
         ui.horizontal(|ui| {
-            ui.spacing_mut().slider_width = -5.0;
             ui.add_sized([80.0, 10.0], egui::Label::new("Offset:"));
             ui.add(
-                egui::Slider::new(&mut self.reg, 0..=u16::MAX)
-                    .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                    .drag_value_speed(0.0),
-            ).on_hover_cursor(egui::CursorIcon::Text);
+                egui::DragValue::new(&mut self.reg)
+                    .clamp_range(0..=u16::MAX)
+                    .speed(0.0),
+            )
+            .on_hover_cursor(egui::CursorIcon::Text);
             ui.add_sized([80.0, 10.0], egui::Label::new("Count:"));
             if ui
                 .add(
-                    egui::Slider::new(&mut self.count, 1..=122)
-                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                        .drag_value_speed(0.0),
+                    egui::DragValue::new(&mut self.count)
+                        .clamp_range(1..=122)
+                        .speed(0.0),
                 )
                 .on_hover_cursor(egui::CursorIcon::Text)
                 .lost_focus()
@@ -342,19 +343,24 @@ impl QuerryWrapper {
                 | FC::ReadDiscreteInput
                 | FC::ReadHoldingRegisters
                 | FC::ReadInputRegisters => {
-                    ui.spacing_mut().slider_width = 0.0;
-                    ui.label("Factor:");
-                    ui.add(
-                        egui::Slider::new(&mut self.factor, 0.0..=f32::MAX)
-                            .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                            .drag_value_speed(0.0),
-                    ).on_hover_cursor(egui::CursorIcon::Text);
-                    ui.label("Value Offsett:");
-                    ui.add(
-                        egui::Slider::new(&mut self.value_offsett, f32::MIN..=f32::MAX)
-                            .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                            .drag_value_speed(0.0),
-                    ).on_hover_cursor(egui::CursorIcon::Text);
+                    if self.data_veiw1 != DataView::Hexadecimal {
+                        ui.label("Factor:");
+                        ui.add(
+                            egui::DragValue::new(&mut self.factor)
+                                .clamp_range(0.0..=f32::MAX)
+                                .speed(0.0)
+                                .custom_formatter(|n, _| format!("{:}", n)),
+                        )
+                        .on_hover_cursor(egui::CursorIcon::Text);
+                        ui.label("Value Offsett:");
+                        ui.add(
+                            egui::DragValue::new(&mut self.value_offsett)
+                                .clamp_range(f32::MIN..=f32::MAX)
+                                .speed(0.0)
+                                .custom_formatter(|n, _| format!("{:}", n)),
+                        )
+                        .on_hover_cursor(egui::CursorIcon::Text);
+                    }
                 }
                 FC::WriteCoil
                 | FC::WriteCoils
@@ -362,6 +368,7 @@ impl QuerryWrapper {
                 | FC::WriteHoldingRegisters => (),
             }
         });
+
         ui.horizontal(|ui| match self.data_veiw1 {
             DataView::Unsigned16bit => match self.function_code {
                 FC::ReadCoils
@@ -451,28 +458,95 @@ impl QuerryWrapper {
 
         ui.separator();
     }
+    ///Start to implementing generic function for drawing different datatypes, second guessed myself halfway
+    ///because it might bee a  good idea to have the controle over each type for specific styling and parcing etc...
+    //
+    //pub fn draw_data_grid(&mut self, ui: &mut egui::Ui) {
+    //    egui::Grid::new("some_unique_id")
+    //        .striped(true)
+    //        .show(ui, |ui| match self.function_code {
+    //            FC::ReadCoils
+    //            | FC::ReadDiscreteInput
+    //            | FC::ReadHoldingRegisters
+    //            | FC::ReadInputRegisters => {
+    //                for i in (0..self.read_buffer.len()).step_by(1) {
+    //                    if (i % 16) == 0 {
+    //                        ui.end_row();
+    //                    }
 
-    pub fn draw_read_data_grid_hex(&self, ui: &mut egui::Ui) -> () {
+    //                    ui.add_sized(
+    //                        [40.0, 10.0],
+    //                        egui::Label::new(format!("{:X}", self.read_buffer[i]))
+    //                            .sense(egui::Sense::click()),
+    //                    )
+    //                    .on_hover_text(format!("Byte {}", i));
+    //                }
+    //            }
+    //            FC::WriteCoil
+    //            | FC::WriteCoils
+    //            | FC::WriteHoldingRegister
+    //            | FC::WriteHoldingRegisters => {
+    //                for i in (0..self.write_buffer.len()).step_by(1) {
+    //                    if (i % 16) == 0 {
+    //                        ui.end_row();
+    //                    }
+
+    //                    ui.add_sized(
+    //                        [40.0, 10.0],
+    //                        egui::Label::new(format!("{:X}", self.read_buffer[i]))
+    //                            .sense(egui::Sense::click()),
+    //                    )
+    //                    .on_hover_text(format!("Byte {}", i));
+    //                }
+    //            }
+    //        });
+    //}
+
+    //pub fn draw_read_gridcell() {}
+    //pub fn draw_write_gridcell() {}
+
+    pub fn draw_read_data_grid_hex(&mut self, ui: &mut egui::Ui) {
         egui::Grid::new("some_unique_id")
             .striped(true)
             .show(ui, |ui| {
-                for i in (0..self.read_buffer.len()).step_by(1) {
+                let mut reg_nr: u16 = self.reg + 1;
+                for i in (0..self.read_buffer.len()).step_by(2) {
                     if (i % 16) == 0 {
                         ui.end_row();
                     }
 
                     ui.add_sized(
-                        [40.0, 10.0],
-                        egui::Label::new(format!("{:X}", self.read_buffer[i]))
-                            .sense(egui::Sense::click()),
+                        [60.0, 20.0],
+                        egui::Label::new(format!(
+                            "{:04X}",
+                            u16::from_be_bytes([self.read_buffer[i], self.read_buffer[i + 1]])
+                        ))
+                        .sense(egui::Sense::click()),
                     )
-                    .on_hover_text(format!("Byte {}", i));
+                    .on_hover_text(format!("Reg {}", reg_nr))
+                    .context_menu(|ui| {
+                        if ui.button("\u{1F441} Add to watched").clicked() {
+                            self.watched_list.push(crate::watched::WatchedReg::new(
+                                format!(
+                                    "Reg {} as U16 * {} + {}",
+                                    reg_nr, self.factor, self.value_offsett
+                                )
+                                .to_owned(),
+                                "".to_owned(),
+                                i,
+                                self.factor,
+                                self.value_offsett,
+                                self.data_veiw1,
+                            ));
+                        }
+                    });
+                    reg_nr += 1;
                 }
             });
     }
 
-    pub fn draw_read_data_grid_u16(&mut self, ui: &mut egui::Ui) -> () {
-        egui::Grid::new("hex_grid_r")
+    pub fn draw_read_data_grid_u16(&mut self, ui: &mut egui::Ui) {
+        egui::Grid::new("u16_grid_r")
             .striped(true)
             .max_col_width(60.)
             .min_col_width(60.)
@@ -483,7 +557,7 @@ impl QuerryWrapper {
                         ui.end_row();
                     }
                     ui.add_sized(
-                        [40.0, 10.0],
+                        [60.0, 20.0],
                         egui::Label::new(
                             (u16::from_be_bytes([self.read_buffer[i], self.read_buffer[i + 1]])
                                 as f32
@@ -515,7 +589,7 @@ impl QuerryWrapper {
             });
     }
 
-    pub fn draw_read_data_grid_i16(&mut self, ui: &mut egui::Ui) -> () {
+    pub fn draw_read_data_grid_i16(&mut self, ui: &mut egui::Ui) {
         egui::Grid::new("i16_grid_r")
             .striped(true)
             .max_col_width(60.)
@@ -527,7 +601,7 @@ impl QuerryWrapper {
                         ui.end_row();
                     }
                     ui.add_sized(
-                        [40.0, 10.0],
+                        [60.0, 20.0],
                         egui::Label::new(
                             (i16::from_be_bytes([self.read_buffer[i], self.read_buffer[i + 1]])
                                 as f32
@@ -559,7 +633,7 @@ impl QuerryWrapper {
             });
     }
 
-    pub fn draw_read_data_grid_u32(&mut self, ui: &mut egui::Ui) -> () {
+    pub fn draw_read_data_grid_u32(&mut self, ui: &mut egui::Ui) {
         egui::Grid::new("u32_grid_r")
             .striped(true)
             .max_col_width(60.)
@@ -571,7 +645,7 @@ impl QuerryWrapper {
                         ui.end_row();
                     }
                     ui.add_sized(
-                        [40.0, 10.0],
+                        [60.0, 20.0],
                         egui::Label::new(
                             (u32::from_be_bytes([
                                 self.read_buffer[i + 2],
@@ -607,7 +681,7 @@ impl QuerryWrapper {
             });
     }
 
-    pub fn draw_read_data_grid_i32(&mut self, ui: &mut egui::Ui) -> () {
+    pub fn draw_read_data_grid_i32(&mut self, ui: &mut egui::Ui) {
         egui::Grid::new("i32_grid_r")
             .striped(true)
             .max_col_width(60.)
@@ -619,7 +693,7 @@ impl QuerryWrapper {
                         ui.end_row();
                     }
                     ui.add_sized(
-                        [40.0, 10.0],
+                        [60.0, 20.0],
                         egui::Label::new(
                             (i32::from_be_bytes([
                                 self.read_buffer[i + 2],
@@ -655,7 +729,7 @@ impl QuerryWrapper {
             });
     }
 
-    pub fn draw_read_data_grid_f32(&mut self, ui: &mut egui::Ui) -> () {
+    pub fn draw_read_data_grid_f32(&mut self, ui: &mut egui::Ui) {
         egui::Grid::new("f32_grid_r")
             .striped(true)
             .max_col_width(60.)
@@ -667,7 +741,7 @@ impl QuerryWrapper {
                         ui.end_row();
                     }
                     ui.add_sized(
-                        [40.0, 10.0],
+                        [60.0, 20.0],
                         egui::Label::new(
                             (f32::from_be_bytes([
                                 self.read_buffer[i + 2],
@@ -702,31 +776,29 @@ impl QuerryWrapper {
             });
     }
 
-    pub fn draw_write_data_grid_u16(&self, ui: &mut egui::Ui) -> () {
+    pub fn draw_write_data_grid_u16(&self, ui: &mut egui::Ui) {
         egui::Grid::new("u16_grid_w")
             .striped(true)
             .max_col_width(60.)
             .min_col_width(60.)
             .show(ui, |ui| {
-                ui.spacing_mut().slider_width = -5.0;
                 let mut reg_nr: u16 = self.reg + 1;
                 for i in (0..self.write_buffer.len()).step_by(2) {
                     if (i % 16) == 0 {
                         ui.end_row();
                     }
-                    ui.add(
-                        egui::Slider::new(
-                            unsafe {
-                                &mut std::slice::from_raw_parts_mut(
-                                    self.write_buffer[i..i + 1].as_ptr() as *mut u16,
-                                    2,
-                                )[0]
-                            },
-                            u16::MIN..=u16::MAX,
-                        )
-                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                        .drag_value_speed(0.0),
+                    ui.add_sized(
+                        [60., 20.],
+                        egui::DragValue::new(unsafe {
+                            &mut std::slice::from_raw_parts_mut(
+                                self.write_buffer[i..i + 1].as_ptr() as *mut u16,
+                                2,
+                            )[0]
+                        })
+                        .clamp_range(u16::MIN..=u16::MAX)
+                        .speed(0.0),
                     )
+                    .on_hover_cursor(egui::CursorIcon::Text)
                     .on_hover_cursor(egui::CursorIcon::Text)
                     .on_hover_text(format!("Reg {}", reg_nr))
                     .context_menu(|ui| if ui.button("Watch").clicked() {});
@@ -735,30 +807,27 @@ impl QuerryWrapper {
             });
     }
 
-    pub fn draw_write_data_grid_i16(&self, ui: &mut egui::Ui) -> () {
+    pub fn draw_write_data_grid_i16(&self, ui: &mut egui::Ui) {
         egui::Grid::new("i16_grid_w")
             .striped(true)
             .max_col_width(60.)
             .min_col_width(60.)
             .show(ui, |ui| {
-                ui.spacing_mut().slider_width = -5.0;
                 let mut reg_nr: u16 = self.reg + 1;
                 for i in (0..self.write_buffer.len()).step_by(2) {
                     if (i % 16) == 0 {
                         ui.end_row();
                     }
-                    ui.add(
-                        egui::Slider::new(
-                            unsafe {
-                                &mut std::slice::from_raw_parts_mut(
-                                    self.write_buffer[i..i + 1].as_ptr() as *mut i16,
-                                    2,
-                                )[0]
-                            },
-                            i16::MIN..=i16::MAX,
-                        )
-                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                        .drag_value_speed(0.0),
+                    ui.add_sized(
+                        [60., 20.],
+                        egui::DragValue::new(unsafe {
+                            &mut std::slice::from_raw_parts_mut(
+                                self.write_buffer[i..i + 1].as_ptr() as *mut i16,
+                                2,
+                            )[0]
+                        })
+                        .clamp_range(i16::MIN..=i16::MAX)
+                        .speed(0.0),
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
                     .on_hover_text(format!("Reg {}", reg_nr))
@@ -768,30 +837,27 @@ impl QuerryWrapper {
             });
     }
 
-    pub fn draw_write_data_grid_u32(&self, ui: &mut egui::Ui) -> () {
+    pub fn draw_write_data_grid_u32(&self, ui: &mut egui::Ui) {
         egui::Grid::new("u32_grid_w")
             .striped(true)
             .max_col_width(60.)
             .min_col_width(60.)
             .show(ui, |ui| {
-                ui.spacing_mut().slider_width = -5.0;
                 let mut reg_nr: u16 = self.reg + 1;
                 for i in (0..self.write_buffer.len()).step_by(4) {
                     if (i % 32) == 0 {
                         ui.end_row();
                     }
-                    ui.add(
-                        egui::Slider::new(
-                            unsafe {
-                                &mut std::slice::from_raw_parts_mut(
-                                    self.write_buffer[i..i + 3].as_ptr() as *mut u32,
-                                    4,
-                                )[0]
-                            },
-                            u32::MIN..=u32::MAX,
-                        )
-                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                        .drag_value_speed(0.0),
+                    ui.add_sized(
+                        [60., 20.],
+                        egui::DragValue::new(unsafe {
+                            &mut std::slice::from_raw_parts_mut(
+                                self.write_buffer[i..i + 3].as_ptr() as *mut u32,
+                                2,
+                            )[0]
+                        })
+                        .clamp_range(u32::MIN..=u32::MAX)
+                        .speed(0.0),
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
                     .on_hover_text(format!("Reg {}", reg_nr))
@@ -801,30 +867,27 @@ impl QuerryWrapper {
             });
     }
 
-    pub fn draw_write_data_grid_i32(&self, ui: &mut egui::Ui) -> () {
+    pub fn draw_write_data_grid_i32(&self, ui: &mut egui::Ui) {
         egui::Grid::new("i32_grid_w")
             .striped(true)
             .max_col_width(60.)
             .min_col_width(60.)
             .show(ui, |ui| {
-                ui.spacing_mut().slider_width = -5.0;
                 let mut reg_nr: u16 = self.reg + 1;
                 for i in (0..self.write_buffer.len()).step_by(4) {
                     if (i % 32) == 0 {
                         ui.end_row();
                     }
-                    ui.add(
-                        egui::Slider::new(
-                            unsafe {
-                                &mut std::slice::from_raw_parts_mut(
-                                    self.write_buffer[i..i + 3].as_ptr() as *mut i32,
-                                    4,
-                                )[0]
-                            },
-                            i32::MIN..=i32::MAX,
-                        )
-                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                        .drag_value_speed(0.0),
+                    ui.add_sized(
+                        [60., 20.],
+                        egui::DragValue::new(unsafe {
+                            &mut std::slice::from_raw_parts_mut(
+                                self.write_buffer[i..i + 3].as_ptr() as *mut i32,
+                                2,
+                            )[0]
+                        })
+                        .clamp_range(i32::MIN..=i32::MAX)
+                        .speed(0.0),
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
                     .on_hover_text(format!("Reg {}", reg_nr))
@@ -834,30 +897,28 @@ impl QuerryWrapper {
             });
     }
 
-    pub fn draw_write_data_grid_f32(&self, ui: &mut egui::Ui) -> () {
+    pub fn draw_write_data_grid_f32(&self, ui: &mut egui::Ui) {
         egui::Grid::new("f32_grid_w")
             .striped(true)
             .max_col_width(60.)
             .min_col_width(60.)
             .show(ui, |ui| {
-                ui.spacing_mut().slider_width = -5.0;
                 let mut reg_nr: u16 = self.reg + 1;
                 for i in (0..self.write_buffer.len()).step_by(4) {
                     if (i % 32) == 0 {
                         ui.end_row();
                     }
-                    ui.add(
-                        egui::Slider::new(
-                            unsafe {
-                                &mut std::slice::from_raw_parts_mut(
-                                    self.write_buffer[i..i + 3].as_ptr() as *mut f32,
-                                    4,
-                                )[0]
-                            },
-                            f32::MIN..=f32::MAX,
-                        )
-                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                        .drag_value_speed(0.0),
+                    ui.add_sized(
+                        [60., 20.],
+                        egui::DragValue::new(unsafe {
+                            &mut std::slice::from_raw_parts_mut(
+                                self.write_buffer[i..i + 3].as_ptr() as *mut f32,
+                                2,
+                            )[0]
+                        })
+                        .clamp_range(f32::MIN..=f32::MAX)
+                        .speed(0.0)
+                        .custom_formatter(|n, _| format!("{}", n)),
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
                     .on_hover_text(format!("Reg {}", reg_nr))
@@ -867,31 +928,28 @@ impl QuerryWrapper {
             });
     }
 
-    pub fn draw_write_data_grid_hex(&self, ui: &mut egui::Ui) -> () {
+    pub fn draw_write_data_grid_hex(&self, ui: &mut egui::Ui) {
         egui::Grid::new("hex_grid_w")
             .striped(true)
             .max_col_width(60.)
             .min_col_width(60.)
             .show(ui, |ui| {
-                ui.spacing_mut().slider_width = -5.0;
                 let mut reg_nr: u16 = self.reg + 1;
                 for i in (0..self.write_buffer.len()).step_by(2) {
                     if (i % 16) == 0 {
                         ui.end_row();
                     }
-                    ui.add(
-                        egui::Slider::new(
-                            unsafe {
-                                &mut std::slice::from_raw_parts_mut(
-                                    self.write_buffer[i..i + 1].as_ptr() as *mut u16,
-                                    2,
-                                )[0]
-                            },
-                            u16::MIN..=u16::MAX,
-                        )
-                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
-                        .drag_value_speed(0.0)
-                        .hexadecimal(4, true, true),
+                    ui.add_sized(
+                        [60., 20.],
+                        egui::DragValue::new(unsafe {
+                            &mut std::slice::from_raw_parts_mut(
+                                self.write_buffer[i..i + 1].as_ptr() as *mut u16,
+                                2,
+                            )[0]
+                        })
+                        .clamp_range(u16::MIN..=u16::MAX)
+                        .hexadecimal(4, false, true)
+                        .speed(0.0),
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
                     .on_hover_text(format!("Reg {}", reg_nr))
