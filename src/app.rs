@@ -73,10 +73,9 @@ impl eframe::App for ModbusApp {
                 let mut dev_index: usize = 0;
                 self.devices.retain_mut(|x| {
                     let mut retain = true;
-                    let id = ui.make_persistent_id(dev_index);
                     egui::collapsing_header::CollapsingState::load_with_default_open(
                         ui.ctx(),
-                        id,
+                        ui.make_persistent_id(dev_index),
                         true,
                     )
                     .show_header(ui, |ui| {

@@ -101,8 +101,7 @@ impl ModbusDevice {
         let mut ret: bool = false;
         let mut retain = true;
         self.querrys.retain_mut(|x| {
-            let id = ui.make_persistent_id(quer_index);
-            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
+            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id(quer_index), true)
                 .show_header(ui, |ui| {
                     let tv = ui
                         .toggle_value(&mut x.selected, &x.lable)
