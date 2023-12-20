@@ -117,13 +117,9 @@ impl eframe::App for ModbusApp {
                             dev_index,
                         );
                     });
-                    if self.sel_device_index == dev_index {
-                        x.selected = true
-                    } else {
-                        x.selected = false
-                    }
+                    x.selected = self.sel_device_index == dev_index;
                     dev_index += 1;
-                    return retain;
+                    retain
                 });
 
                 if ui.button("Add Device").clicked() {

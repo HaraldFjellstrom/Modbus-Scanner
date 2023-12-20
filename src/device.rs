@@ -1,4 +1,3 @@
-
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct ModbusDevice {
@@ -68,6 +67,16 @@ impl ModbusDevice {
                 );
             });
 
+            ui.horizontal(|ui| {
+                ui.add_sized([100.0, 10.0], egui::Label::new("Device ID:"));
+                ui.spacing_mut().slider_width = -5.0;
+                ui.add(
+                    egui::Slider::new(&mut self.unit_id, u8::MIN..=u8::MAX)
+                        .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: -1.0 })
+                        .drag_value_speed(0.0),
+                ).on_hover_cursor(egui::CursorIcon::Text);
+            });
+
             //if ui.button("Try Connection").clicked() {
             //    match self.connect(){
             //        Ok(r) => self.connection_status = "Connection succesfully established".to_string(),
@@ -102,7 +111,7 @@ impl ModbusDevice {
         let mut retain = true;
         self.querrys.retain_mut(|x| {
             let id = ui.make_persistent_id(quer_index);
-            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
+            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
                 .show_header(ui, |ui| {
                     let tv = ui
                         .toggle_value(&mut x.selected, &x.lable)
@@ -111,9 +120,6 @@ impl ModbusDevice {
                                 if ui.button("\u{1F5D1} Delete").clicked() {
                                     if index == quer_index {
                                         final_index = quer_index - 1;
-                                        if final_index <= 0 {
-                                            final_index = 0
-                                        }
                                     }
                                     retain = false
                                 }
@@ -136,12 +142,12 @@ impl ModbusDevice {
                     }
 
                     if ret {
-                        return (final_index, this_device);
+                        (final_index, this_device)
                     } else {
                         if retain {
-                            return (index, current_device);
+                            (index, current_device)
                         } else {
-                            return (final_index, current_device);
+                            (final_index, current_device)
                         }
                     }
                 })
@@ -150,7 +156,7 @@ impl ModbusDevice {
                         let mut retain = true;
                         ui.horizontal(|ui| {
                             if !x.locked {
-                                ui.add_sized([150., 10.], egui::TextEdit::singleline(&mut x.lable))
+                                ui.add_sized([150., 10.], egui::TextEdit::singleline(&mut x.label))
                                     .context_menu(|ui| {
                                         if ui.button("\u{1F5D1} Delete").clicked() {
                                             retain = false;
@@ -179,7 +185,7 @@ impl ModbusDevice {
                             } else {
                                 ui.label(format!(
                                     "{}:     {} {}",
-                                    x.lable, x.resulting_value, x.suffix
+                                    x.label, x.resulting_value, x.suffix
                                 ))
                                 .context_menu(|ui| {
                                     if ui.button("\u{1F511} Unlock").clicked() {
@@ -189,28 +195,25 @@ impl ModbusDevice {
                             }
                         });
 
-                        return retain;
+                        retain
                     })
                 });
 
-            if index == quer_index && this_device == current_device {
-                x.selected = true
-            } else {
-                x.selected = false
-            }
+            x.selected = index == quer_index && this_device == current_device;
+
             quer_index += 1;
-            return retain;
+            retain
         });
         if ui.button("Add Querry").clicked() {
             self.querrys.push(crate::query::QuerryWrapper::new());
         }
         if ret {
-            return (final_index, this_device);
+            (final_index, this_device)
         } else {
             if retain {
-                return (index, current_device);
+                (index, current_device)
             } else {
-                return (final_index, current_device);
+                (final_index, current_device)
             }
         }
     }

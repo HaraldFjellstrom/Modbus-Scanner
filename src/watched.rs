@@ -1,7 +1,7 @@
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct WatchedReg {
-    pub lable: String,
+    pub label: String,
     pub suffix: String,
     pub pos: usize,
     pub factor: f32,
@@ -14,7 +14,7 @@ pub struct WatchedReg {
 impl Default for WatchedReg {
     fn default() -> Self {
         Self {
-            lable: "New Watched".to_owned(),
+            label: "New Watched".to_owned(),
             suffix: "".to_owned(),
             pos: 0,
             factor: 1.,
@@ -36,18 +36,18 @@ impl WatchedReg {
         typ: crate::query::DataView,
     ) -> Self {
         Self {
-            lable: label,
-            suffix: suffix,
-            pos: pos,
-            factor: factor,
-            value_offsett: value_offsett,
+            label,
+            suffix,
+            pos,
+            factor,
+            value_offsett,
             resulting_value: 0.,
             locked: false,
             data_type: typ,
         }
     }
 
-    pub fn update(&mut self, read_bytes: &Vec<u8>) -> () {
+    pub fn update(&mut self, read_bytes: &[u8]) {
         match self.data_type {
             crate::query::DataView::Unsigned16bit => {
                 self.resulting_value =
@@ -90,6 +90,7 @@ impl WatchedReg {
                 ]) * self.factor
                     + self.value_offsett
             }
+            crate::query::DataView::Hexadecimal => (),
         }
     }
 }
