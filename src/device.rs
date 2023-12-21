@@ -116,6 +116,7 @@ impl ModbusDevice {
                             if index == quer_index {
                                 final_index = quer_index - 1;
                             }
+                            ui.close_menu();
                             retain = false
                         }
                     });
@@ -151,6 +152,7 @@ impl ModbusDevice {
                             ui.add_sized([150., 10.], egui::TextEdit::singleline(&mut x.label))
                                 .context_menu(|ui| {
                                     if ui.button("\u{1F5D1} Delete").clicked() {
+                                        ui.close_menu();
                                         retain = false;
                                     }
                                 });
@@ -161,6 +163,7 @@ impl ModbusDevice {
                             )
                             .context_menu(|ui| {
                                 if ui.button("\u{1F5D1} Delete").clicked() {
+                                    ui.close_menu();
                                     retain = false;
                                 }
                             });
@@ -168,6 +171,7 @@ impl ModbusDevice {
                             ui.add_sized([50., 10.], egui::TextEdit::singleline(&mut x.suffix))
                                 .context_menu(|ui| {
                                     if ui.button("\u{1F5D1} Delete").clicked() {
+                                        ui.close_menu();
                                         retain = false;
                                     }
                                 });
@@ -185,6 +189,7 @@ impl ModbusDevice {
                             ))
                             .context_menu(|ui| {
                                 if ui.button("\u{1F511} Unlock").clicked() {
+                                    ui.close_menu();
                                     x.locked = false;
                                 }
                             });

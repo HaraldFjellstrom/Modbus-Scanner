@@ -538,6 +538,7 @@ impl QueryWrapper {
                                 self.value_offsett,
                                 self.data_veiw1,
                             ));
+                            ui.close_menu();
                         }
                     });
                     reg_nr += 1;
@@ -582,6 +583,7 @@ impl QueryWrapper {
                                 self.value_offsett,
                                 self.data_veiw1,
                             ));
+                            ui.close_menu();
                         }
                     });
                     reg_nr += 1;
@@ -626,6 +628,7 @@ impl QueryWrapper {
                                 self.value_offsett,
                                 self.data_veiw1,
                             ));
+                            ui.close_menu();
                         }
                     });
                     reg_nr += 1;
@@ -674,6 +677,7 @@ impl QueryWrapper {
                                 self.value_offsett,
                                 self.data_veiw1,
                             ));
+                            ui.close_menu();
                         }
                     });
                     reg_nr += 2;
@@ -722,6 +726,7 @@ impl QueryWrapper {
                                 self.value_offsett,
                                 self.data_veiw1,
                             ));
+                            ui.close_menu();
                         }
                     });
                     reg_nr += 2;
@@ -769,6 +774,7 @@ impl QueryWrapper {
                                 self.value_offsett,
                                 self.data_veiw1,
                             ));
+                            ui.close_menu();
                         }
                     });
                     reg_nr += 2;
@@ -800,8 +806,8 @@ impl QueryWrapper {
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
                     .on_hover_cursor(egui::CursorIcon::Text)
-                    .on_hover_text(format!("Reg {}", reg_nr))
-                    .context_menu(|ui| if ui.button("Watch").clicked() {});
+                    .on_hover_text(format!("Reg {}", reg_nr));
+                    //.context_menu(|ui| if ui.button("Watch").clicked() {});
                     reg_nr += 1;
                 }
             });
@@ -830,8 +836,8 @@ impl QueryWrapper {
                         .speed(0.0),
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
-                    .on_hover_text(format!("Reg {}", reg_nr))
-                    .context_menu(|ui| if ui.button("Watch").clicked() {});
+                    .on_hover_text(format!("Reg {}", reg_nr));
+                    //.context_menu(|ui| if ui.button("Watch").clicked() {});
                     reg_nr += 1;
                 }
             });
@@ -860,8 +866,8 @@ impl QueryWrapper {
                         .speed(0.0),
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
-                    .on_hover_text(format!("Reg {}", reg_nr))
-                    .context_menu(|ui| if ui.button("Watch").clicked() {});
+                    .on_hover_text(format!("Reg {}", reg_nr));
+                    //.context_menu(|ui| if ui.button("Watch").clicked() {});
                     reg_nr += 2;
                 }
             });
@@ -890,8 +896,8 @@ impl QueryWrapper {
                         .speed(0.0),
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
-                    .on_hover_text(format!("Reg {}", reg_nr))
-                    .context_menu(|ui| if ui.button("Watch").clicked() {});
+                    .on_hover_text(format!("Reg {}", reg_nr));
+                    //.context_menu(|ui| if ui.button("Watch").clicked() {});
                     reg_nr += 2;
                 }
             });
@@ -921,8 +927,8 @@ impl QueryWrapper {
                         .custom_formatter(|n, _| format!("{}", n)),
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
-                    .on_hover_text(format!("Reg {}", reg_nr))
-                    .context_menu(|ui| if ui.button("Watch").clicked() {});
+                    .on_hover_text(format!("Reg {}", reg_nr));
+                    //.context_menu(|ui| if ui.button("Watch").clicked() {});
                     reg_nr += 2;
                 }
             });
@@ -952,8 +958,8 @@ impl QueryWrapper {
                         .speed(0.0),
                     )
                     .on_hover_cursor(egui::CursorIcon::Text)
-                    .on_hover_text(format!("Reg {}", reg_nr))
-                    .context_menu(|ui| if ui.button("Watch").clicked() {});
+                    .on_hover_text(format!("Reg {}", reg_nr));
+                    //.context_menu(|ui| if ui.button("Watch").clicked() {});
                     reg_nr += 1;
                 }
             });
