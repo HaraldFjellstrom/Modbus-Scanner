@@ -7,6 +7,6 @@ mod device;
 pub use device::ModbusDevice;
 
 mod query;
-pub use query::QuerryWrapper;
+pub use query::QueryWrapper;
 
 mod watched;

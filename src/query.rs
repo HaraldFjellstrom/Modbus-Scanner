@@ -30,7 +30,7 @@ pub enum DataView {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct QuerryWrapper {
+pub struct QueryWrapper {
     pub lable: String,
     pub reg: u16,
     pub count: u16,
@@ -47,11 +47,11 @@ pub struct QuerryWrapper {
     pub watched_list: Vec<crate::watched::WatchedReg>,
 }
 
-impl Default for QuerryWrapper {
+impl Default for QueryWrapper {
     fn default() -> Self {
         Self {
             // Example stuff:
-            lable: "New Querry".to_owned(),
+            lable: "New Query".to_owned(),
             reg: 0,
             count: 0,
             tr_id: 0,
@@ -69,11 +69,11 @@ impl Default for QuerryWrapper {
     }
 }
 
-impl QuerryWrapper {
+impl QueryWrapper {
     /// Called once before the first frame.
     pub fn new() -> Self {
         Self {
-            lable: "New Querry".to_owned(),
+            lable: "New Query".to_owned(),
             reg: 0,
             count: 1,
             tr_id: 1,
@@ -167,7 +167,7 @@ impl QuerryWrapper {
             }
         }
 
-        match QuerryWrapper::connect(ip, port) {
+        match QueryWrapper::connect(ip, port) {
             Err(e) => self.response = e.to_string(),
             Ok(mut con) => {
                 match con.write(&request) {

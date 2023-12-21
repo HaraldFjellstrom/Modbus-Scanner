@@ -1,33 +1,38 @@
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Clone, Copy)]
+pub enum ListItemAction {
+    Nothing,
+    Delete,
+    MoveUp,
+    MoveDown,
+}
+
 #[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
+#[serde(default)]
 pub struct ModbusDevice {
-    // Example stuff:
     pub lable: String,
     pub unit_id: u8,
     pub ip: String,
     pub port: String,
     pub selected: bool,
-    pub querrys: Vec<crate::query::QuerryWrapper>,
+    pub querys: Vec<crate::query::QueryWrapper>,
     pub notes: String,
 }
 
 impl Default for ModbusDevice {
     fn default() -> Self {
         Self {
-            // Example stuff:
             lable: "New Device".to_owned(),
             unit_id: 1,
             ip: Default::default(),
             port: Default::default(),
             selected: false,
-            querrys: vec![crate::query::QuerryWrapper::new()],
+            querys: vec![crate::query::QueryWrapper::new()],
             notes: "Add device notes here".to_string(),
         }
     }
 }
 
 impl ModbusDevice {
-    /// Called once before the first frame.
     pub fn new() -> Self {
         Self {
             lable: "New Device".to_owned(),
@@ -35,7 +40,7 @@ impl ModbusDevice {
             ip: Default::default(),
             port: Default::default(),
             selected: false,
-            querrys: Default::default(),
+            querys: Default::default(),
             notes: "Add device notes here".to_string(),
         }
     }
@@ -82,14 +87,11 @@ impl ModbusDevice {
                 egui::TextEdit::multiline(&mut self.notes),
             );
         } else {
-            self.querrys
-                .get_mut(query_id)
-                .unwrap()
-                .draw_query_frame(ui);
+            self.querys.get_mut(query_id).unwrap().draw_query_frame(ui);
         }
     }
 
-    pub fn build_querry_tree(
+    pub fn build_query_tree(
         &mut self,
         ui: &mut egui::Ui,
         index: usize,
@@ -100,102 +102,106 @@ impl ModbusDevice {
         let mut final_index = 0;
         let mut ret: bool = false;
         let mut retain = true;
-        self.querrys.retain_mut(|x| {
-            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id(quer_index), true)
-                .show_header(ui, |ui| {
-                    let tv = ui
-                        .toggle_value(&mut x.selected, &x.lable)
-                        .context_menu(|ui| {
-                            if quer_index > 0 && ui.button("\u{1F5D1} Delete").clicked() {
-                                if index == quer_index {
-                                    final_index = quer_index - 1;
-                                }
-                                retain = false
+        self.querys.retain_mut(|x| {
+            egui::collapsing_header::CollapsingState::load_with_default_open(
+                ui.ctx(),
+                ui.make_persistent_id(quer_index),
+                true,
+            )
+            .show_header(ui, |ui| {
+                let tv = ui
+                    .toggle_value(&mut x.selected, &x.lable)
+                    .context_menu(|ui| {
+                        if quer_index > 0 && ui.button("\u{1F5D1} Delete").clicked() {
+                            if index == quer_index {
+                                final_index = quer_index - 1;
                             }
-                        });
-
-                    if tv.clicked() {
-                        ret = true;
-                        final_index = quer_index;
-                    }
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
-                        if ui.button("\u{23F5}").clicked() {
-                            x.execute(&self.ip, &self.port)
+                            retain = false
                         }
                     });
 
-                    for n in 0..x.watched_list.len() {
-                        x.watched_list[n].update(&x.read_buffer);
-                    }
+                if tv.clicked() {
+                    ret = true;
+                    final_index = quer_index;
+                }
 
-                    if ret {
-                        (final_index, this_device)
-                    } else if retain {
-                        (index, current_device)
-                    } else {
-                        (final_index, current_device)
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
+                    if ui.button("\u{23F5}").clicked() {
+                        x.execute(&self.ip, &self.port)
                     }
-                })
-                .body(|ui| {
-                    x.watched_list.retain_mut(|x| {
-                        let mut retain = true;
-                        ui.horizontal(|ui| {
-                            if !x.locked {
-                                ui.add_sized([150., 10.], egui::TextEdit::singleline(&mut x.label))
-                                    .context_menu(|ui| {
-                                        if ui.button("\u{1F5D1} Delete").clicked() {
-                                            retain = false;
-                                        }
-                                    });
+                });
 
-                                ui.add_sized(
-                                    [60., 10.],
-                                    egui::Label::new(x.resulting_value.to_string()),
-                                )
+                for n in 0..x.watched_list.len() {
+                    x.watched_list[n].update(&x.read_buffer);
+                }
+
+                if ret {
+                    (final_index, this_device)
+                } else if retain {
+                    (index, current_device)
+                } else {
+                    (final_index, current_device)
+                }
+            })
+            .body(|ui| {
+                x.watched_list.retain_mut(|x| {
+                    let mut retain = true;
+                    ui.horizontal(|ui| {
+                        if !x.locked {
+                            ui.add_sized([150., 10.], egui::TextEdit::singleline(&mut x.label))
                                 .context_menu(|ui| {
                                     if ui.button("\u{1F5D1} Delete").clicked() {
                                         retain = false;
                                     }
                                 });
 
-                                ui.add_sized([50., 10.], egui::TextEdit::singleline(&mut x.suffix))
-                                    .context_menu(|ui| {
-                                        if ui.button("\u{1F5D1} Delete").clicked() {
-                                            retain = false;
-                                        }
-                                    });
-                                if ui.button("\u{1F512}").clicked() {
-                                    x.locked = true
+                            ui.add_sized(
+                                [60., 10.],
+                                egui::Label::new(x.resulting_value.to_string()),
+                            )
+                            .context_menu(|ui| {
+                                if ui.button("\u{1F5D1} Delete").clicked() {
+                                    retain = false;
                                 }
-                            } else {
-                                ui.label(format!(
-                                    "{}:     {} {}",
-                                    x.label, x.resulting_value, x.suffix
-                                ))
-                                .on_hover_text(format!(
-                                    "Factor {}   Offsett {}",
-                                    x.factor, x.value_offsett
-                                ))
+                            });
+
+                            ui.add_sized([50., 10.], egui::TextEdit::singleline(&mut x.suffix))
                                 .context_menu(|ui| {
-                                    if ui.button("\u{1F511} Unlock").clicked() {
-                                        x.locked = false;
+                                    if ui.button("\u{1F5D1} Delete").clicked() {
+                                        retain = false;
                                     }
                                 });
+                            if ui.button("\u{1F512}").clicked() {
+                                x.locked = true
                             }
-                        });
+                        } else {
+                            ui.label(format!(
+                                "{}:     {} {}",
+                                x.label, x.resulting_value, x.suffix
+                            ))
+                            .on_hover_text(format!(
+                                "Factor {}   Offsett {}",
+                                x.factor, x.value_offsett
+                            ))
+                            .context_menu(|ui| {
+                                if ui.button("\u{1F511} Unlock").clicked() {
+                                    x.locked = false;
+                                }
+                            });
+                        }
+                    });
 
-                        retain
-                    })
-                });
+                    retain
+                })
+            });
 
             x.selected = index == quer_index && this_device == current_device;
 
             quer_index += 1;
             retain
         });
-        if ui.button("Add Querry").clicked() {
-            self.querrys.push(crate::query::QuerryWrapper::new());
+        if ui.button("Add Query").clicked() {
+            self.querys.push(crate::query::QueryWrapper::new());
         }
         if ret {
             (final_index, this_device)

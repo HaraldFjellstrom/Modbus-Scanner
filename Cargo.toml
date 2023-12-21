@@ -20,6 +20,7 @@ log = "0.4"
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
+serde_json = "*"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
